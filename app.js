@@ -58,10 +58,16 @@ const sources = {
         default:       return value;
       }
     },
-    async fetch(query, page, sort) {
+    // Recherche simple équivalente, utilisée quand la recherche avancée ne renvoie rien.
+    plainQuery({ type, value }) {
+      if (type === "genre") return value.name;
+      return type === "isbn" ? value.replace(/[^0-9Xx]/g, "") : value;
+    },
+    async request(q, page, sort) {
       const params = new URLSearchParams({
-        q: this.buildQuery(query),
+        q,
         langRestrict: "fr",
+        country: "FR",
         printType: "books",
         maxResults: PAGE_SIZE,
         startIndex: page * PAGE_SIZE,
@@ -74,12 +80,19 @@ const sources = {
           ? "Google Books : quota gratuit épuisé, une clé API est nécessaire"
           : `Google Books : erreur ${res.status}`);
       }
-      const data = await res.json();
+      return res.json();
+    },
+    async fetch(query, page, sort) {
+      let data = await this.request(this.buildQuery(query), page, sort);
+      if (!(data.items || []).length && query.type !== "all") {
+        data = await this.request(this.plainQuery(query), page, sort);
+      }
       const raw = data.items || [];
       const books = raw
         .filter(it => !it.volumeInfo.language || it.volumeInfo.language === "fr")
         .map(normalizeGoogle);
-      return { books, total: data.totalItems || 0, hasMore: raw.length === PAGE_SIZE };
+      // Google renvoie parfois moins de résultats que demandé : on continue tant qu'il en reste.
+      return { books, total: data.totalItems || 0, hasMore: raw.length > 0 && page * PAGE_SIZE + raw.length < (data.totalItems || 0) };
     },
   },
 
