@@ -476,3 +476,12 @@ a.tag.active { color: var(--accent-text); }
   .main-nav::-webkit-scrollbar { display: none; }
   #account-area { margin-left: auto; }
 }
+a.book-open { display: block; color: var(--text); }
+a.book-open:hover { text-decoration: none; }
+/* La recherche garde une largeur confortable ; le menu passe à la ligne si besoin. */
+.search { flex: 1 1 380px; }
+.main-nav { margin-left: auto; }
+@media (min-width: 641px) { .search { min-width: 440px; } }
+@media (max-width: 640px) { .search { flex: 1 1 100%; min-width: 0; } }
+.genre-card { min-width: 0; }
+.genre-card span:last-child { min-width: 0; overflow-wrap: anywhere; hyphens: auto; }

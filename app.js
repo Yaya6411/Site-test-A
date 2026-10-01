@@ -92,6 +92,7 @@ const sources = {
       const raw = data.items || [];
       const books = raw
         .filter(it => !it.volumeInfo.language || it.volumeInfo.language === "fr")
+        .filter(it => !isLowContent(it.volumeInfo.title, it.volumeInfo.subtitle, it.volumeInfo.categories))
         .map(normalizeGoogle);
       // Google renvoie parfois moins de résultats que demandé : on continue tant qu'il en reste.
       return { books, total: data.totalItems || 0, hasMore: raw.length > 0 && page * PAGE_SIZE + raw.length < (data.totalItems || 0) };
@@ -121,7 +122,9 @@ const sources = {
       const res = await fetch(`https://openlibrary.org/search.json?${params}`);
       if (!res.ok) throw new Error(`Open Library : erreur ${res.status}`);
       const data = await res.json();
-      const books = (data.docs || []).map(normalizeOpenLibrary);
+      const books = (data.docs || [])
+        .filter(doc => !isLowContent(doc.title, doc.subtitle, doc.subject))
+        .map(normalizeOpenLibrary);
       return { books, total: data.numFound || 0, hasMore: (page + 1) * PAGE_SIZE < (data.numFound || 0) };
     },
   },
@@ -155,6 +158,28 @@ function coverCandidates(isbn, ...primary) {
 // Version haute définition des vignettes Google Books.
 function googleCoverHd(url) {
   return url.replace(/^http:/, "https:").replace("&edge=curl", "") + "&fife=w480-h720";
+}
+
+/* ---------- Ouvrages exclus ----------------------------------------------
+ * Agendas, calendriers, coloriages, carnets vierges et livres de grilles
+ * ne sont pas des livres à lire : on les retire des résultats.
+ * ------------------------------------------------------------------------- */
+
+const LOW_CONTENT_PATTERNS = [
+  "agenda", "agendas", "calendrier", "calendriers", "calendar", "planner", "planificateur", "organiseur", "organizer",
+  "coloriage", "coloriages", "colorier", "a colorier", "coloring", "colouring", "mandala", "mandalas", "art-therapie",
+  "carnet de notes", "carnet de bord", "carnet ligne", "carnet vierge", "carnet a dessin", "carnet de croquis",
+  "cahier ligne", "cahier vierge", "pages lignees", "pages vierges", "bloc-notes", "bloc notes",
+  "notebook", "journal vierge", "bullet journal", "sketchbook", "lined", "blank book", "dot grid", "papier millimetre",
+  "sudoku", "mots fleches", "mots croises", "mots meles", "word search", "crossword",
+  "activity book", "cahier d'activites", "livre d'activites", "autocollants", "stickers",
+];
+const LOW_CONTENT_RE = new RegExp(`(^|[^a-z])(${LOW_CONTENT_PATTERNS.map(p => p.replace(/[-'\s]/g, "[-' ]?")).join("|")})([^a-z]|$)`);
+
+function isLowContent(title, subtitle, categories) {
+  const text = [title, subtitle, ...(categories || [])].join(" | ")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return LOW_CONTENT_RE.test(text);
 }
 
 function normalizeGoogle(item) {
@@ -354,6 +379,11 @@ function viewHome() {
     <section>
       <div class="section-head"><h2>Auteurs populaires</h2><a href="#/auteurs">Tous les auteurs →</a></div>
       <div class="author-grid">${homeAuthors().map(authorChipHtml).join("")}</div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>Les incontournables</h2><a href="#/incontournables">Voir la sélection →</a></div>
+      <div class="tag-filter">${MUST_READS.map(c => `<a class="tag" href="#/incontournables/${slug(c.name)}">${esc(c.name)}</a>`).join("")}</div>
     </section>
 
     <section>
@@ -564,6 +594,8 @@ function route() {
       return viewRanking();
     case "nouveautes":
       return viewRecent(arg);
+    case "incontournables":
+      return viewMustReads(arg);
     case "genre": {
       const genre = GENRES.find(g => g.id === arg);
       if (!genre) return viewNotFound();

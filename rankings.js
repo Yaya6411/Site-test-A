@@ -225,3 +225,85 @@ function viewRecent(genreId) {
   moreBtn.addEventListener("click", load);
   load();
 }
+
+/* ---------- Incontournables ----------------------------------------------- */
+
+const slug = s => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+// Retrouve la fiche d'un incontournable (titre + auteur) dans le catalogue.
+// Les correspondances trouvées sont gardées 7 jours dans le navigateur pour économiser les requêtes.
+const MUST_CACHE_DAYS = 7;
+
+function mustCache() {
+  try { return JSON.parse(localStorage.getItem("bibliofr.mustReads") || "{}"); } catch { return {}; }
+}
+
+async function findMustRead(title, author) {
+  const key = reviewKey({ title, authors: [author] });
+  const cached = mustCache()[key];
+  if (cached && Date.now() - cached.at < MUST_CACHE_DAYS * 864e5) {
+    if (cached.book) bookCache.set(cached.book.id, cached.book);
+    return cached.book;
+  }
+  const surname = key.split("|")[1];
+  let book = null;
+  try {
+    const { books } = await searchBooks({ type: "all", value: `${title} ${author}` });
+    book = books.find(b => reviewKey(b) === key)
+      || books.find(b => reviewKey(b).split("|")[1] === surname && reviewKey(b).startsWith(key.split("|")[0]))
+      || null;
+  } catch {
+    return null; // pas de mise en cache d'un échec réseau
+  }
+  try {
+    const all = mustCache();
+    all[key] = { at: Date.now(), book };
+    localStorage.setItem("bibliofr.mustReads", JSON.stringify(all));
+  } catch { /* stockage indisponible */ }
+  return book;
+}
+
+function mustReadCardHtml(title, author, book) {
+  const store = getStore();
+  const target = book || { title, authors: [author], covers: [] };
+  return `
+    <article class="book-card" data-must="${esc(title)}">
+      ${book
+        ? `<button class="book-open" data-book="${esc(book.id)}" aria-label="Voir les détails de ${esc(title)}">
+             <div class="cover">${coverHtml(book)}</div>
+             <h3 class="book-title">${esc(title)}</h3>
+           </button>`
+        : `<a class="book-open" href="#/recherche/all/${enc(title + " " + author)}">
+             <div class="cover">${generatedCoverHtml(target)}</div>
+             <h3 class="book-title">${esc(title)}</h3>
+           </a>`}
+      <p class="book-authors"><a href="${authorLink(author)}">${esc(author)}</a></p>
+      <p class="book-meta"></p>
+      <a class="buy-btn" href="${esc(storeUrl(store, target))}" target="_blank" rel="noopener">Acheter sur ${esc(store.name)} ↗</a>
+    </article>`;
+}
+
+function viewMustReads(catSlug) {
+  const cat = MUST_READS.find(c => slug(c.name) === catSlug) || MUST_READS[0];
+  document.title = "Incontournables — Biblio FR";
+  const total = MUST_READS.reduce((n, c) => n + c.books.length, 0);
+
+  app.innerHTML = `
+    <h1 class="page-title">Les incontournables</h1>
+    <p class="muted">${total} livres de référence à avoir lus, des classiques aux mangas.</p>
+    <div class="tag-filter">
+      ${MUST_READS.map(c => `<a class="tag${c === cat ? " active" : ""}" href="#/incontournables/${slug(c.name)}">${esc(c.name)}</a>`).join("")}
+    </div>
+    <div class="book-grid" id="must-grid">
+      ${cat.books.map(([t, a]) => mustReadCardHtml(t, a, null)).join("")}
+    </div>`;
+
+  // Couvertures et fiches complétées au fur et à mesure.
+  const grid = document.getElementById("must-grid");
+  cat.books.forEach(async ([title, author]) => {
+    const book = await findMustRead(title, author);
+    if (!book || !document.body.contains(grid)) return;
+    const card = grid.querySelector(`[data-must="${CSS.escape(title)}"]`);
+    if (card) card.outerHTML = mustReadCardHtml(title, author, book);
+  });
+}
