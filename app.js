@@ -55,12 +55,14 @@ const sources = {
         case "author": return `inauthor:"${value}"`;
         case "title":  return `intitle:${value}`;
         case "isbn":   return `isbn:${value.replace(/[^0-9Xx]/g, "")}`;
+        case "recent": return value ? `subject:"${value.google}"` : "roman";
         default:       return value;
       }
     },
     // Recherche simple équivalente, utilisée quand la recherche avancée ne renvoie rien.
     plainQuery({ type, value }) {
       if (type === "genre") return value.name;
+      if (type === "recent") return value ? value.name : "roman";
       return type === "isbn" ? value.replace(/[^0-9Xx]/g, "") : value;
     },
     async request(q, page, sort) {
@@ -112,6 +114,7 @@ const sources = {
       else if (type === "author") params.set("author", value);
       else if (type === "title") params.set("title", value);
       else if (type === "isbn") params.set("isbn", value.replace(/[^0-9Xx]/g, ""));
+      else if (type === "recent") value ? params.set("subject", value.openlibrary) : params.set("q", "language:fre");
       else params.set("q", value);
       if (sort === "new") params.set("sort", "new");
 
@@ -306,6 +309,7 @@ function bookCardHtml(book) {
   const store = getStore();
   return `
     <article class="book-card">
+      ${book.isNew ? `<span class="new-badge">Nouveau</span>` : ""}
       <button class="book-open" data-book="${esc(book.id)}" aria-label="Voir les détails de ${esc(book.title)}">
         <div class="cover">${coverHtml(book)}</div>
         <h3 class="book-title">${esc(book.title)}</h3>
@@ -353,6 +357,11 @@ function viewHome() {
     </section>
 
     <section>
+      <div class="section-head"><h2>🆕 Sorties récentes</h2><a href="#/nouveautes">Toutes les nouveautés →</a></div>
+      <div class="shelf" id="shelf-recent">${loadingHtml}</div>
+    </section>
+
+    <section>
       <div class="section-head"><h2>🎌 Mangas</h2><a href="#/genre/manga">Voir plus →</a></div>
       <div class="shelf" id="shelf-manga">${loadingHtml}</div>
     </section>
@@ -362,6 +371,7 @@ function viewHome() {
       <div class="shelf" id="shelf-romans">${loadingHtml}</div>
     </section>`;
 
+  fillRecentShelf("shelf-recent");
   fillShelf("shelf-manga", { type: "genre", value: GENRES.find(g => g.id === "manga") });
   fillShelf("shelf-romans", { type: "genre", value: GENRES.find(g => g.id === "romans") });
 }
@@ -550,6 +560,10 @@ function route() {
       return viewAuthors();
     case "compte":
       return viewAccount();
+    case "classement":
+      return viewRanking();
+    case "nouveautes":
+      return viewRecent(arg);
     case "genre": {
       const genre = GENRES.find(g => g.id === arg);
       if (!genre) return viewNotFound();
