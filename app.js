@@ -21,7 +21,10 @@ const prefs = {
   },
 };
 
-const getSource = () => prefs.get("source", "google");
+const getSource = () => {
+  const source = prefs.get("source", "all");
+  return source === "all" || sources[source] ? source : "all";
+};
 const getStore = () => STORES.find(s => s.id === prefs.get("store", "leslibraires")) || STORES[0];
 
 /* ---------- Utilitaires ------------------------------------------------- */
@@ -98,6 +101,32 @@ const sources = {
   },
 };
 
+/* ---------- Couvertures -------------------------------------------------
+ * Chaque livre reçoit une liste d'images candidates, essayées dans l'ordre :
+ * celle fournie par la source, puis Open Library et Amazon via l'ISBN.
+ * Si aucune ne fonctionne, une couverture est dessinée avec le titre.
+ * ------------------------------------------------------------------------- */
+
+function isbn13to10(isbn) {
+  if (!/^978\d{10}$/.test(isbn)) return "";
+  const core = isbn.slice(3, 12);
+  const sum = [...core].reduce((acc, d, i) => acc + Number(d) * (10 - i), 0);
+  const check = (11 - (sum % 11)) % 11;
+  return core + (check === 10 ? "X" : String(check));
+}
+
+function coverCandidates(isbn, primary) {
+  const list = [];
+  if (primary) list.push(primary);
+  const clean = (isbn || "").replace(/[^0-9Xx]/g, "");
+  if (clean) {
+    list.push(`https://covers.openlibrary.org/b/isbn/${clean}-M.jpg?default=false`);
+    const isbn10 = clean.length === 10 ? clean : isbn13to10(clean);
+    if (isbn10) list.push(`https://images-na.ssl-images-amazon.com/images/P/${isbn10}.01.MZZZZZZZ.jpg`);
+  }
+  return [...new Set(list)];
+}
+
 function normalizeGoogle(item) {
   const v = item.volumeInfo || {};
   const ids = v.industryIdentifiers || [];
@@ -113,7 +142,7 @@ function normalizeGoogle(item) {
     categories: v.categories || [],
     description: (v.description || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""),
     isbn,
-    cover: cover ? cover.replace(/^http:/, "https:").replace("&edge=curl", "") : "",
+    covers: coverCandidates(isbn, cover && cover.replace(/^http:/, "https:").replace("&edge=curl", "")),
     link: v.infoLink || "",
   };
 }
@@ -131,7 +160,7 @@ function normalizeOpenLibrary(doc) {
     categories: (doc.subject || []).slice(0, 6),
     description: "",
     isbn,
-    cover: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : "",
+    covers: coverCandidates(isbn, doc.cover_i && `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`),
     link: "https://openlibrary.org" + doc.key,
   };
 }
@@ -142,25 +171,61 @@ const SOURCE_COOLDOWN_MS = 5 * 60 * 1000;
 const sourceDownUntil = {};
 const resultCache = new Map();
 
-async function searchBooks(query, page = 0, sort = "relevance") {
-  const preferred = getSource();
-  const order = [preferred, ...Object.keys(sources).filter(n => n !== preferred)];
-  const available = order.filter(n => !(sourceDownUntil[n] > Date.now()));
+async function fetchFrom(name, query, page, sort) {
   const queryKey = query.type === "genre" ? query.value.id : query.value;
-  let lastError;
+  const cacheKey = JSON.stringify([name, query.type, queryKey, page, sort]);
+  if (resultCache.has(cacheKey)) return resultCache.get(cacheKey);
+  try {
+    const result = await sources[name].fetch(query, page, sort);
+    result.books.forEach(b => bookCache.set(b.id, b));
+    resultCache.set(cacheKey, result);
+    return result;
+  } catch (err) {
+    sourceDownUntil[name] = Date.now() + SOURCE_COOLDOWN_MS;
+    throw err;
+  }
+}
 
-  for (const name of available.length ? available : order) {
-    const cacheKey = JSON.stringify([name, query.type, queryKey, page, sort]);
-    if (resultCache.has(cacheKey)) return resultCache.get(cacheKey);
+const isUp = name => !(sourceDownUntil[name] > Date.now());
+const bookKey = b => b.isbn || (b.title + "|" + (b.authors[0] || "")).toLowerCase();
+
+async function searchBooks(query, page = 0, sort = "relevance") {
+  const mode = getSource();
+  const all = Object.keys(sources);
+
+  if (mode === "all") {
+    // Toutes les sources en parallèle, résultats entremêlés et dédoublonnés.
+    const names = all.filter(isUp).length ? all.filter(isUp) : all;
+    const settled = await Promise.allSettled(names.map(n => fetchFrom(n, query, page, sort)));
+    const ok = settled.map((r, i) => r.status === "fulfilled" && { ...r.value, name: names[i] }).filter(Boolean);
+    if (!ok.length) {
+      throw new Error(`Le catalogue est momentanément indisponible (${settled[0].reason.message}). Réessayez dans un instant.`);
+    }
+    const seen = new Set();
+    const books = [];
+    const longest = Math.max(...ok.map(r => r.books.length));
+    for (let i = 0; i < longest; i++) {
+      for (const r of ok) {
+        const b = r.books[i];
+        if (b && !seen.has(bookKey(b))) { seen.add(bookKey(b)); books.push(b); }
+      }
+    }
+    return {
+      books,
+      total: ok.reduce((n, r) => n + r.total, 0),
+      hasMore: ok.some(r => r.hasMore),
+      sourceLabel: ok.map(r => sources[r.name].label).join(" + "),
+    };
+  }
+
+  const order = [mode, ...all.filter(n => n !== mode)];
+  let lastError;
+  for (const name of order.filter(isUp).length ? order.filter(isUp) : order) {
     try {
-      const result = await sources[name].fetch(query, page, sort);
-      result.source = name;
-      result.books.forEach(b => bookCache.set(b.id, b));
-      resultCache.set(cacheKey, result);
-      return result;
+      const result = await fetchFrom(name, query, page, sort);
+      return { ...result, sourceLabel: sources[name].label };
     } catch (err) {
       lastError = err;
-      sourceDownUntil[name] = Date.now() + SOURCE_COOLDOWN_MS;
     }
   }
   throw new Error(`Le catalogue est momentanément indisponible (${lastError.message}). Réessayez dans un instant.`);
@@ -168,12 +233,39 @@ async function searchBooks(query, page = 0, sort = "relevance") {
 
 /* ---------- Rendu des composants --------------------------------------- */
 
+function generatedCoverHtml(book) {
+  let hash = 0;
+  for (const c of book.title) hash = (hash * 31 + c.charCodeAt(0)) % 360;
+  return `<div class="cover-gen" style="--hue:${hash}">
+            <span class="cover-gen-title">${esc(book.title.split(" — ")[0])}</span>
+            <span class="cover-gen-author">${esc(book.authors[0] || "")}</span>
+          </div>`;
+}
+
 function coverHtml(book) {
-  if (book.cover) {
-    return `<img src="${esc(book.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"
-                 onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'cover-fallback',textContent:'📕'}))">`;
+  if (!book.covers.length) return generatedCoverHtml(book);
+  return `<img src="${esc(book.covers[0])}" alt="" loading="lazy" referrerpolicy="no-referrer"
+               data-book-id="${esc(book.id)}" data-cover-index="0"
+               onload="coverLoaded(this)" onerror="coverFailed(this)">`;
+}
+
+// Image vide (Amazon renvoie un pixel transparent quand il n'a pas la couverture).
+function coverLoaded(img) {
+  if (img.naturalWidth < 20 || img.naturalHeight < 20) coverFailed(img);
+}
+
+// Passe à l'image suivante, ou dessine une couverture si plus aucune n'est disponible.
+function coverFailed(img) {
+  const book = bookCache.get(img.dataset.bookId);
+  const next = Number(img.dataset.coverIndex) + 1;
+  if (book && next < book.covers.length) {
+    img.dataset.coverIndex = next;
+    img.src = book.covers[next];
+  } else if (book) {
+    img.outerHTML = generatedCoverHtml(book);
+  } else {
+    img.remove();
   }
-  return `<div class="cover-fallback">📕</div>`;
 }
 
 function bookCardHtml(book) {
@@ -202,6 +294,12 @@ const loadingHtml = `<div class="loading"><span class="spinner"></span> Chargeme
 
 /* ---------- Vues --------------------------------------------------------- */
 
+// Deux auteurs de chaque catégorie pour la page d'accueil.
+function homeAuthors() {
+  const tags = [...new Set(FEATURED_AUTHORS.map(a => a.tag))];
+  return tags.flatMap(t => FEATURED_AUTHORS.filter(a => a.tag === t).slice(0, 2)).slice(0, 15);
+}
+
 function viewHome() {
   document.title = "Biblio FR — le catalogue des livres en français";
   app.innerHTML = `
@@ -212,12 +310,12 @@ function viewHome() {
 
     <section>
       <div class="section-head"><h2>Genres</h2><a href="#/genres">Tous les genres →</a></div>
-      <div class="genre-grid">${GENRES.slice(0, 12).map(genreCardHtml).join("")}</div>
+      <div class="genre-grid">${HOME_GENRES.map(id => GENRES.find(g => g.id === id)).filter(Boolean).map(genreCardHtml).join("")}</div>
     </section>
 
     <section>
       <div class="section-head"><h2>Auteurs populaires</h2><a href="#/auteurs">Tous les auteurs →</a></div>
-      <div class="author-grid">${FEATURED_AUTHORS.slice(0, 12).map(authorChipHtml).join("")}</div>
+      <div class="author-grid">${homeAuthors().map(authorChipHtml).join("")}</div>
     </section>
 
     <section>
@@ -249,7 +347,12 @@ function viewGenres() {
   document.title = "Genres — Biblio FR";
   app.innerHTML = `
     <h1 class="page-title">Tous les genres</h1>
-    <div class="genre-grid">${GENRES.map(genreCardHtml).join("")}</div>`;
+    <p class="muted">${GENRES.length} genres, des romans aux mangas en passant par la cuisine.</p>
+    ${GENRE_GROUPS.map(group => `
+      <section class="genre-group">
+        <h2>${esc(group.name)}</h2>
+        <div class="genre-grid">${group.genres.map(genreCardHtml).join("")}</div>
+      </section>`).join("")}`;
 }
 
 function viewAuthors() {
@@ -257,6 +360,7 @@ function viewAuthors() {
   const tags = [...new Set(FEATURED_AUTHORS.map(a => a.tag))];
   app.innerHTML = `
     <h1 class="page-title">Auteurs</h1>
+    <p class="muted">${FEATURED_AUTHORS.length} auteurs mis en avant. Cherchez n'importe quel autre auteur ci-dessous.</p>
     <form id="author-form" class="inline-search">
       <input id="author-input" type="search" placeholder="Nom d'un auteur, d'un mangaka, d'un scénariste…" required>
       <button type="submit">Voir ses livres</button>
@@ -316,7 +420,7 @@ function viewResults({ title, subtitle = "", query }) {
     moreBtn.hidden = true;
     status.innerHTML = loadingHtml;
     try {
-      const { books, total, hasMore, source } = await searchBooks(query, page, sort);
+      const { books, total, hasMore, sourceLabel } = await searchBooks(query, page, sort);
       if (current !== token) return;
       const fresh = books.filter(b => !seen.has(b.id));
       fresh.forEach(b => seen.add(b.id));
@@ -324,7 +428,7 @@ function viewResults({ title, subtitle = "", query }) {
       status.innerHTML = seen.size === 0
         ? `<p class="empty">Aucun livre en français trouvé. Essayez une autre orthographe ou changez de source dans les préférences ⚙️.</p>`
         : "";
-      if (total) count.textContent = `Environ ${total.toLocaleString("fr-FR")} résultats · source : ${sources[source].label}`;
+      if (total) count.textContent = `Environ ${total.toLocaleString("fr-FR")} résultats · source : ${sourceLabel}`;
       moreBtn.textContent = "Charger plus de livres";
       moreBtn.hidden = !hasMore;
     } catch (err) {
@@ -413,7 +517,7 @@ function route() {
       if (!genre) return viewNotFound();
       return viewResults({
         title: `${genre.icon} ${genre.name}`,
-        subtitle: `Livres en français classés dans le genre « ${esc(genre.name)} ».`,
+        subtitle: `${esc(genre.group)} · livres en français classés dans le genre « ${esc(genre.name)} ».`,
         query: { type: "genre", value: genre },
       });
     }

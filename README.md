@@ -5,8 +5,9 @@ romans, mangas, bandes dessinées, essais, jeunesse, etc.
 
 ## Fonctionnalités
 
-- **Navigation par genre** : 28 genres (Romans, Mangas, BD, Policier, SF, Fantasy, Jeunesse, Histoire…).
-- **Navigation par auteur** : auteurs mis en avant filtrables par catégorie + recherche de n'importe quel auteur.
+- **Navigation par genre** : 58 genres regroupés en 6 familles (Littérature, Imaginaire, Mangas & BD — dont shōnen, shōjo, seinen —, Jeunesse, Savoirs & essais, Vie pratique).
+- **Navigation par auteur** : plus de 140 auteurs mis en avant, filtrables par catégorie, + recherche de n'importe quel auteur.
+- **Couvertures** : image de la source, puis Open Library et Amazon via l'ISBN ; à défaut, une couverture est dessinée avec le titre.
 - **Recherche** globale, par titre, par auteur ou par ISBN.
 - **Fiche détaillée** de chaque livre (couverture, éditeur, date, ISBN, résumé).
 - **Lien d'achat** pour chaque livre (par ISBN quand il est connu) vers Leslibraires.fr, Fnac, Amazon.fr,
@@ -18,7 +19,9 @@ romans, mangas, bandes dessinées, essais, jeunesse, etc.
 Aucun catalogue n'est stocké dans le dépôt : le site interroge en direct
 [Google Books](https://developers.google.com/books) (filtre `langRestrict=fr`) ou
 [Open Library](https://openlibrary.org/developers/api) (filtre `language=fre`), ce qui donne accès à des
-centaines de milliers d'ouvrages en français sans maintenance. La source se choisit dans les préférences.
+centaines de milliers d'ouvrages en français sans maintenance. Par défaut les deux sources sont interrogées
+en parallèle et leurs résultats fusionnés (sans doublons) ; si l'une est indisponible, l'autre prend le relais.
+Le choix se fait dans les préférences.
 
 ## Lancer le site
 
