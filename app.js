@@ -62,9 +62,7 @@ const sources = {
         orderBy: sort === "new" ? "newest" : "relevance",
       });
       const res = await fetch(`https://www.googleapis.com/books/v1/volumes?${params}`);
-      if (!res.ok) throw new Error(res.status === 429
-        ? "Google Books limite temporairement les requêtes. Réessayez dans un instant ou changez de source dans les préférences ⚙️."
-        : `Erreur Google Books (${res.status}).`);
+      if (!res.ok) throw new Error(`Google Books : erreur ${res.status}`);
       const data = await res.json();
       const raw = data.items || [];
       const books = raw
@@ -92,7 +90,7 @@ const sources = {
       if (sort === "new") params.set("sort", "new");
 
       const res = await fetch(`https://openlibrary.org/search.json?${params}`);
-      if (!res.ok) throw new Error(`Erreur Open Library (${res.status}).`);
+      if (!res.ok) throw new Error(`Open Library : erreur ${res.status}`);
       const data = await res.json();
       const books = (data.docs || []).map(normalizeOpenLibrary);
       return { books, total: data.numFound || 0, hasMore: (page + 1) * PAGE_SIZE < (data.numFound || 0) };
@@ -138,10 +136,34 @@ function normalizeOpenLibrary(doc) {
   };
 }
 
+// Quand une source échoue (quota Google dépassé, panne…), on bascule sur l'autre
+// et on laisse la source en échec de côté pendant quelques minutes.
+const SOURCE_COOLDOWN_MS = 5 * 60 * 1000;
+const sourceDownUntil = {};
+const resultCache = new Map();
+
 async function searchBooks(query, page = 0, sort = "relevance") {
-  const result = await sources[getSource()].fetch(query, page, sort);
-  result.books.forEach(b => bookCache.set(b.id, b));
-  return result;
+  const preferred = getSource();
+  const order = [preferred, ...Object.keys(sources).filter(n => n !== preferred)];
+  const available = order.filter(n => !(sourceDownUntil[n] > Date.now()));
+  const queryKey = query.type === "genre" ? query.value.id : query.value;
+  let lastError;
+
+  for (const name of available.length ? available : order) {
+    const cacheKey = JSON.stringify([name, query.type, queryKey, page, sort]);
+    if (resultCache.has(cacheKey)) return resultCache.get(cacheKey);
+    try {
+      const result = await sources[name].fetch(query, page, sort);
+      result.source = name;
+      result.books.forEach(b => bookCache.set(b.id, b));
+      resultCache.set(cacheKey, result);
+      return result;
+    } catch (err) {
+      lastError = err;
+      sourceDownUntil[name] = Date.now() + SOURCE_COOLDOWN_MS;
+    }
+  }
+  throw new Error(`Le catalogue est momentanément indisponible (${lastError.message}). Réessayez dans un instant.`);
 }
 
 /* ---------- Rendu des composants --------------------------------------- */
@@ -294,7 +316,7 @@ function viewResults({ title, subtitle = "", query }) {
     moreBtn.hidden = true;
     status.innerHTML = loadingHtml;
     try {
-      const { books, total, hasMore } = await searchBooks(query, page, sort);
+      const { books, total, hasMore, source } = await searchBooks(query, page, sort);
       if (current !== token) return;
       const fresh = books.filter(b => !seen.has(b.id));
       fresh.forEach(b => seen.add(b.id));
@@ -302,16 +324,23 @@ function viewResults({ title, subtitle = "", query }) {
       status.innerHTML = seen.size === 0
         ? `<p class="empty">Aucun livre en français trouvé. Essayez une autre orthographe ou changez de source dans les préférences ⚙️.</p>`
         : "";
-      if (total) count.textContent = `Environ ${total.toLocaleString("fr-FR")} résultats · source : ${sources[getSource()].label}`;
+      if (total) count.textContent = `Environ ${total.toLocaleString("fr-FR")} résultats · source : ${sources[source].label}`;
+      moreBtn.textContent = "Charger plus de livres";
       moreBtn.hidden = !hasMore;
     } catch (err) {
       if (current !== token) return;
       status.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+      moreBtn.textContent = "Réessayer";
+      moreBtn.dataset.retry = "1";
       moreBtn.hidden = false;
     }
   }
 
-  moreBtn.addEventListener("click", () => { page++; load(); });
+  moreBtn.addEventListener("click", () => {
+    if (moreBtn.dataset.retry) delete moreBtn.dataset.retry;
+    else page++;
+    load();
+  });
   document.getElementById("sort-select").addEventListener("change", e => {
     sort = e.target.value;
     page = 0;
