@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Biblio FR — le catalogue des livres en français</title>
+  <meta name="description" content="Parcourez les livres disponibles en français : romans, mangas, BD, essais… par genre ou par auteur, avec un lien d'achat pour chaque ouvrage.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a href="#/" class="logo">📚 Biblio<span>FR</span></a>
+      <form id="search-form" class="search" role="search">
+        <select id="search-mode" aria-label="Type de recherche">
+          <option value="all">Tout</option>
+          <option value="title">Titre</option>
+          <option value="author">Auteur</option>
+          <option value="isbn">ISBN</option>
+        </select>
+        <input id="search-input" type="search" placeholder="Rechercher un livre, un manga, un auteur…" autocomplete="off" required>
+        <button type="submit">Rechercher</button>
+      </form>
+      <nav class="main-nav">
+        <a href="#/genres">Genres</a>
+        <a href="#/auteurs">Auteurs</a>
+        <button id="settings-btn" class="icon-btn" title="Préférences" aria-label="Préférences">⚙️</button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="app" class="wrap"></main>
+
+  <dialog id="book-dialog" class="dialog">
+    <button class="dialog-close" data-close aria-label="Fermer">✕</button>
+    <div id="book-detail"></div>
+  </dialog>
+
+  <dialog id="settings-dialog" class="dialog small">
+    <button class="dialog-close" data-close aria-label="Fermer">✕</button>
+    <h2>Préférences</h2>
+    <label class="field">
+      Source du catalogue
+      <select id="pref-source">
+        <option value="google">Google Books (recommandé)</option>
+        <option value="openlibrary">Open Library</option>
+      </select>
+    </label>
+    <label class="field">
+      Librairie préférée (bouton « Acheter »)
+      <select id="pref-store"></select>
+    </label>
+    <p class="muted">Les préférences sont enregistrées dans votre navigateur.</p>
+  </dialog>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>Catalogue alimenté en direct par <a href="https://books.google.fr" target="_blank" rel="noopener">Google Books</a> et <a href="https://openlibrary.org" target="_blank" rel="noopener">Open Library</a>, filtré sur les ouvrages en langue française.
+      Les liens d'achat mènent vers des librairies en ligne ; les prix et la disponibilité sont ceux affichés par chaque revendeur.</p>
+    </div>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

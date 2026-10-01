@@ -1,0 +1,451 @@
+"use strict";
+
+/* =========================================================================
+ *  Biblio FR — catalogue des livres en français
+ *  Application monopage sans dépendance : routage par hash, données
+ *  récupérées en direct depuis Google Books ou Open Library.
+ * ========================================================================= */
+
+const PAGE_SIZE = 40;
+const app = document.getElementById("app");
+const bookCache = new Map();
+
+/* ---------- Préférences ------------------------------------------------- */
+
+const prefs = {
+  get(key, fallback) {
+    try { return localStorage.getItem("bibliofr." + key) || fallback; } catch { return fallback; }
+  },
+  set(key, value) {
+    try { localStorage.setItem("bibliofr." + key, value); } catch { /* stockage indisponible */ }
+  },
+};
+
+const getSource = () => prefs.get("source", "google");
+const getStore = () => STORES.find(s => s.id === prefs.get("store", "leslibraires")) || STORES[0];
+
+/* ---------- Utilitaires ------------------------------------------------- */
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+}[c]));
+
+const enc = encodeURIComponent;
+const authorLink = name => `#/auteur/${enc(name)}`;
+
+function storeUrl(store, book) {
+  const query = book.isbn || [book.title, book.authors[0]].filter(Boolean).join(" ");
+  return store.url(enc(query));
+}
+
+/* ---------- Sources de données ------------------------------------------ */
+
+const sources = {
+  google: {
+    label: "Google Books",
+    buildQuery({ type, value }) {
+      switch (type) {
+        case "genre":  return `subject:"${value.google}"`;
+        case "author": return `inauthor:"${value}"`;
+        case "title":  return `intitle:${value}`;
+        case "isbn":   return `isbn:${value.replace(/[^0-9Xx]/g, "")}`;
+        default:       return value;
+      }
+    },
+    async fetch(query, page, sort) {
+      const params = new URLSearchParams({
+        q: this.buildQuery(query),
+        langRestrict: "fr",
+        printType: "books",
+        maxResults: PAGE_SIZE,
+        startIndex: page * PAGE_SIZE,
+        orderBy: sort === "new" ? "newest" : "relevance",
+      });
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?${params}`);
+      if (!res.ok) throw new Error(res.status === 429
+        ? "Google Books limite temporairement les requêtes. Réessayez dans un instant ou changez de source dans les préférences ⚙️."
+        : `Erreur Google Books (${res.status}).`);
+      const data = await res.json();
+      const raw = data.items || [];
+      const books = raw
+        .filter(it => !it.volumeInfo.language || it.volumeInfo.language === "fr")
+        .map(normalizeGoogle);
+      return { books, total: data.totalItems || 0, hasMore: raw.length === PAGE_SIZE };
+    },
+  },
+
+  openlibrary: {
+    label: "Open Library",
+    async fetch(query, page, sort) {
+      const params = new URLSearchParams({
+        language: "fre",
+        limit: PAGE_SIZE,
+        page: page + 1,
+        fields: "key,title,subtitle,author_name,first_publish_year,isbn,cover_i,subject,publisher,number_of_pages_median",
+      });
+      const { type, value } = query;
+      if (type === "genre") params.set("subject", value.openlibrary);
+      else if (type === "author") params.set("author", value);
+      else if (type === "title") params.set("title", value);
+      else if (type === "isbn") params.set("isbn", value.replace(/[^0-9Xx]/g, ""));
+      else params.set("q", value);
+      if (sort === "new") params.set("sort", "new");
+
+      const res = await fetch(`https://openlibrary.org/search.json?${params}`);
+      if (!res.ok) throw new Error(`Erreur Open Library (${res.status}).`);
+      const data = await res.json();
+      const books = (data.docs || []).map(normalizeOpenLibrary);
+      return { books, total: data.numFound || 0, hasMore: (page + 1) * PAGE_SIZE < (data.numFound || 0) };
+    },
+  },
+};
+
+function normalizeGoogle(item) {
+  const v = item.volumeInfo || {};
+  const ids = v.industryIdentifiers || [];
+  const isbn = (ids.find(i => i.type === "ISBN_13") || ids.find(i => i.type === "ISBN_10") || {}).identifier || "";
+  const cover = v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail);
+  return {
+    id: "g-" + item.id,
+    title: v.title + (v.subtitle ? " — " + v.subtitle : ""),
+    authors: v.authors || [],
+    year: (v.publishedDate || "").slice(0, 4),
+    publisher: v.publisher || "",
+    pages: v.pageCount || "",
+    categories: v.categories || [],
+    description: (v.description || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""),
+    isbn,
+    cover: cover ? cover.replace(/^http:/, "https:").replace("&edge=curl", "") : "",
+    link: v.infoLink || "",
+  };
+}
+
+function normalizeOpenLibrary(doc) {
+  const isbns = doc.isbn || [];
+  const isbn = isbns.find(i => i.length === 13 && i.startsWith("978")) || isbns[0] || "";
+  return {
+    id: "ol-" + doc.key.replace(/\//g, "_"),
+    title: doc.title + (doc.subtitle ? " — " + doc.subtitle : ""),
+    authors: doc.author_name || [],
+    year: doc.first_publish_year ? String(doc.first_publish_year) : "",
+    publisher: (doc.publisher || [])[0] || "",
+    pages: doc.number_of_pages_median || "",
+    categories: (doc.subject || []).slice(0, 6),
+    description: "",
+    isbn,
+    cover: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : "",
+    link: "https://openlibrary.org" + doc.key,
+  };
+}
+
+async function searchBooks(query, page = 0, sort = "relevance") {
+  const result = await sources[getSource()].fetch(query, page, sort);
+  result.books.forEach(b => bookCache.set(b.id, b));
+  return result;
+}
+
+/* ---------- Rendu des composants --------------------------------------- */
+
+function coverHtml(book) {
+  if (book.cover) {
+    return `<img src="${esc(book.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer"
+                 onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'cover-fallback',textContent:'📕'}))">`;
+  }
+  return `<div class="cover-fallback">📕</div>`;
+}
+
+function bookCardHtml(book) {
+  const store = getStore();
+  return `
+    <article class="book-card">
+      <button class="book-open" data-book="${esc(book.id)}" aria-label="Voir les détails de ${esc(book.title)}">
+        <div class="cover">${coverHtml(book)}</div>
+        <h3 class="book-title">${esc(book.title)}</h3>
+      </button>
+      <p class="book-authors">${book.authors.slice(0, 2).map(a => `<a href="${authorLink(a)}">${esc(a)}</a>`).join(", ") || "<span class='muted'>Auteur inconnu</span>"}</p>
+      <p class="book-meta">${esc(book.year)}</p>
+      <a class="buy-btn" href="${esc(storeUrl(store, book))}" target="_blank" rel="noopener">Acheter sur ${esc(store.name)} ↗</a>
+    </article>`;
+}
+
+function genreCardHtml(g) {
+  return `<a class="genre-card" href="#/genre/${g.id}"><span class="genre-icon">${g.icon}</span><span>${esc(g.name)}</span></a>`;
+}
+
+function authorChipHtml(a) {
+  return `<a class="author-chip" href="${authorLink(a.name)}"><strong>${esc(a.name)}</strong><small>${esc(a.tag)}</small></a>`;
+}
+
+const loadingHtml = `<div class="loading"><span class="spinner"></span> Chargement…</div>`;
+
+/* ---------- Vues --------------------------------------------------------- */
+
+function viewHome() {
+  document.title = "Biblio FR — le catalogue des livres en français";
+  app.innerHTML = `
+    <section class="hero">
+      <h1>Tous les livres en français, au même endroit</h1>
+      <p>Romans, mangas, BD, essais, jeunesse… Parcourez le catalogue par genre ou par auteur, puis achetez en un clic chez votre libraire en ligne préféré.</p>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>Genres</h2><a href="#/genres">Tous les genres →</a></div>
+      <div class="genre-grid">${GENRES.slice(0, 12).map(genreCardHtml).join("")}</div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>Auteurs populaires</h2><a href="#/auteurs">Tous les auteurs →</a></div>
+      <div class="author-grid">${FEATURED_AUTHORS.slice(0, 12).map(authorChipHtml).join("")}</div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>🎌 Mangas</h2><a href="#/genre/manga">Voir plus →</a></div>
+      <div class="shelf" id="shelf-manga">${loadingHtml}</div>
+    </section>
+
+    <section>
+      <div class="section-head"><h2>📖 Romans</h2><a href="#/genre/romans">Voir plus →</a></div>
+      <div class="shelf" id="shelf-romans">${loadingHtml}</div>
+    </section>`;
+
+  fillShelf("shelf-manga", { type: "genre", value: GENRES.find(g => g.id === "manga") });
+  fillShelf("shelf-romans", { type: "genre", value: GENRES.find(g => g.id === "romans") });
+}
+
+async function fillShelf(elId, query) {
+  const el = document.getElementById(elId);
+  try {
+    const { books } = await searchBooks(query);
+    if (!document.body.contains(el)) return;
+    el.innerHTML = books.slice(0, 12).map(bookCardHtml).join("") || `<p class="muted">Aucun résultat.</p>`;
+  } catch (err) {
+    if (document.body.contains(el)) el.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  }
+}
+
+function viewGenres() {
+  document.title = "Genres — Biblio FR";
+  app.innerHTML = `
+    <h1 class="page-title">Tous les genres</h1>
+    <div class="genre-grid">${GENRES.map(genreCardHtml).join("")}</div>`;
+}
+
+function viewAuthors() {
+  document.title = "Auteurs — Biblio FR";
+  const tags = [...new Set(FEATURED_AUTHORS.map(a => a.tag))];
+  app.innerHTML = `
+    <h1 class="page-title">Auteurs</h1>
+    <form id="author-form" class="inline-search">
+      <input id="author-input" type="search" placeholder="Nom d'un auteur, d'un mangaka, d'un scénariste…" required>
+      <button type="submit">Voir ses livres</button>
+    </form>
+    <div class="tag-filter">
+      <button class="tag active" data-tag="">Tous</button>
+      ${tags.map(t => `<button class="tag" data-tag="${esc(t)}">${esc(t)}</button>`).join("")}
+    </div>
+    <div class="author-grid" id="author-list">${FEATURED_AUTHORS.map(authorChipHtml).join("")}</div>`;
+
+  document.getElementById("author-form").addEventListener("submit", e => {
+    e.preventDefault();
+    const name = document.getElementById("author-input").value.trim();
+    if (name) location.hash = authorLink(name);
+  });
+  app.querySelector(".tag-filter").addEventListener("click", e => {
+    const btn = e.target.closest(".tag");
+    if (!btn) return;
+    app.querySelectorAll(".tag").forEach(t => t.classList.toggle("active", t === btn));
+    const list = btn.dataset.tag ? FEATURED_AUTHORS.filter(a => a.tag === btn.dataset.tag) : FEATURED_AUTHORS;
+    document.getElementById("author-list").innerHTML = list.map(authorChipHtml).join("");
+  });
+}
+
+function viewResults({ title, subtitle = "", query }) {
+  document.title = `${title} — Biblio FR`;
+  let page = 0;
+  let sort = "relevance";
+  let token = 0;
+  const seen = new Set();
+
+  app.innerHTML = `
+    <div class="results-head">
+      <div>
+        <h1 class="page-title">${esc(title)}</h1>
+        ${subtitle ? `<p class="muted">${subtitle}</p>` : ""}
+      </div>
+      <label class="sort">Trier par
+        <select id="sort-select">
+          <option value="relevance">Pertinence</option>
+          <option value="new">Plus récents</option>
+        </select>
+      </label>
+    </div>
+    <p id="results-count" class="muted"></p>
+    <div class="book-grid" id="results"></div>
+    <div id="results-status"></div>
+    <div class="more-wrap"><button id="more-btn" class="more-btn" hidden>Charger plus de livres</button></div>`;
+
+  const grid = document.getElementById("results");
+  const status = document.getElementById("results-status");
+  const moreBtn = document.getElementById("more-btn");
+  const count = document.getElementById("results-count");
+
+  async function load() {
+    const current = ++token;
+    moreBtn.hidden = true;
+    status.innerHTML = loadingHtml;
+    try {
+      const { books, total, hasMore } = await searchBooks(query, page, sort);
+      if (current !== token) return;
+      const fresh = books.filter(b => !seen.has(b.id));
+      fresh.forEach(b => seen.add(b.id));
+      grid.insertAdjacentHTML("beforeend", fresh.map(bookCardHtml).join(""));
+      status.innerHTML = seen.size === 0
+        ? `<p class="empty">Aucun livre en français trouvé. Essayez une autre orthographe ou changez de source dans les préférences ⚙️.</p>`
+        : "";
+      if (total) count.textContent = `Environ ${total.toLocaleString("fr-FR")} résultats · source : ${sources[getSource()].label}`;
+      moreBtn.hidden = !hasMore;
+    } catch (err) {
+      if (current !== token) return;
+      status.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+      moreBtn.hidden = false;
+    }
+  }
+
+  moreBtn.addEventListener("click", () => { page++; load(); });
+  document.getElementById("sort-select").addEventListener("change", e => {
+    sort = e.target.value;
+    page = 0;
+    seen.clear();
+    grid.innerHTML = "";
+    count.textContent = "";
+    load();
+  });
+  load();
+}
+
+function viewNotFound() {
+  app.innerHTML = `<p class="empty">Page introuvable. <a href="#/">Retour à l'accueil</a></p>`;
+}
+
+/* ---------- Fiche livre (modale) ---------------------------------------- */
+
+const bookDialog = document.getElementById("book-dialog");
+
+function openBook(id) {
+  const book = bookCache.get(id);
+  if (!book) return;
+  const preferred = getStore();
+  const others = STORES.filter(s => s.id !== preferred.id);
+  const meta = [
+    book.year && ["Parution", esc(book.year)],
+    book.publisher && ["Éditeur", esc(book.publisher)],
+    book.pages && ["Pages", esc(book.pages)],
+    book.isbn && ["ISBN", esc(book.isbn)],
+  ].filter(Boolean);
+
+  document.getElementById("book-detail").innerHTML = `
+    <div class="detail">
+      <div class="detail-cover cover">${coverHtml(book)}</div>
+      <div class="detail-body">
+        <h2>${esc(book.title)}</h2>
+        <p class="book-authors">${book.authors.map(a => `<a href="${authorLink(a)}" data-close>${esc(a)}</a>`).join(", ") || "Auteur inconnu"}</p>
+        <dl class="meta">${meta.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
+        ${book.categories.length ? `<p class="cats">${book.categories.map(c => `<span>${esc(c)}</span>`).join("")}</p>` : ""}
+        ${book.description ? `<div class="desc">${esc(book.description)}</div>` : ""}
+        <a class="buy-btn big" href="${esc(storeUrl(preferred, book))}" target="_blank" rel="noopener">Acheter sur ${esc(preferred.name)} ↗</a>
+        <p class="muted small">Également disponible chez :</p>
+        <div class="store-list">
+          ${others.map(s => `<a href="${esc(storeUrl(s, book))}" target="_blank" rel="noopener">${esc(s.name)}</a>`).join("")}
+        </div>
+        ${book.link ? `<p class="small"><a href="${esc(book.link)}" target="_blank" rel="noopener">Fiche complète sur ${esc(sources[book.id.startsWith("g-") ? "google" : "openlibrary"].label)} ↗</a></p>` : ""}
+      </div>
+    </div>`;
+  bookDialog.showModal();
+}
+
+/* ---------- Routeur ------------------------------------------------------ */
+
+function route() {
+  const [, section = "", ...rest] = location.hash.replace(/^#/, "").split("/");
+  const arg = rest.map(decodeURIComponent).join("/");
+  window.scrollTo(0, 0);
+
+  if (bookDialog.open) bookDialog.close();
+
+  switch (section) {
+    case "":
+      return viewHome();
+    case "genres":
+      return viewGenres();
+    case "auteurs":
+      return viewAuthors();
+    case "genre": {
+      const genre = GENRES.find(g => g.id === arg);
+      if (!genre) return viewNotFound();
+      return viewResults({
+        title: `${genre.icon} ${genre.name}`,
+        subtitle: `Livres en français classés dans le genre « ${esc(genre.name)} ».`,
+        query: { type: "genre", value: genre },
+      });
+    }
+    case "auteur":
+      if (!arg) return viewNotFound();
+      return viewResults({
+        title: arg,
+        subtitle: `Livres de ${esc(arg)} disponibles en français.`,
+        query: { type: "author", value: arg },
+      });
+    case "recherche": {
+      const [mode, ...q] = rest.map(decodeURIComponent);
+      const text = q.join("/");
+      if (!text) return viewNotFound();
+      const labels = { all: "", title: "titre : ", author: "auteur : ", isbn: "ISBN : " };
+      return viewResults({
+        title: `Recherche : ${labels[mode] || ""}« ${text} »`,
+        query: { type: mode || "all", value: text },
+      });
+    }
+    default:
+      return viewNotFound();
+  }
+}
+
+/* ---------- Événements globaux ------------------------------------------ */
+
+document.getElementById("search-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const q = document.getElementById("search-input").value.trim();
+  const mode = document.getElementById("search-mode").value;
+  if (!q) return;
+  if (mode === "author") location.hash = authorLink(q);
+  else location.hash = `#/recherche/${mode}/${enc(q)}`;
+});
+
+document.addEventListener("click", e => {
+  const opener = e.target.closest("[data-book]");
+  if (opener) { openBook(opener.dataset.book); return; }
+  const closer = e.target.closest("[data-close]");
+  if (closer) closer.closest("dialog")?.close();
+});
+
+// Fermer une modale en cliquant sur le fond
+document.querySelectorAll("dialog").forEach(d => d.addEventListener("click", e => {
+  if (e.target === d) d.close();
+}));
+
+// Préférences
+const settingsDialog = document.getElementById("settings-dialog");
+const prefSource = document.getElementById("pref-source");
+const prefStore = document.getElementById("pref-store");
+prefStore.innerHTML = STORES.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join("");
+
+document.getElementById("settings-btn").addEventListener("click", () => {
+  prefSource.value = getSource();
+  prefStore.value = getStore().id;
+  settingsDialog.showModal();
+});
+prefSource.addEventListener("change", () => { prefs.set("source", prefSource.value); route(); });
+prefStore.addEventListener("change", () => { prefs.set("store", prefStore.value); route(); });
+
+window.addEventListener("hashchange", route);
+route();

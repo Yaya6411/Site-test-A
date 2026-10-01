@@ -1,0 +1,80 @@
+// Données statiques : genres, auteurs mis en avant et librairies en ligne.
+
+// Chaque genre indique la requête à utiliser pour chaque source de données.
+//  - google      : valeur passée à "subject:" dans l'API Google Books
+//  - openlibrary : valeur passée au paramètre "subject" d'Open Library
+const GENRES = [
+  { id: "romans",          name: "Romans",                 icon: "📖", google: "fiction",               openlibrary: "fiction" },
+  { id: "policier",        name: "Policier & Thriller",    icon: "🔍", google: "detective",             openlibrary: "detective and mystery stories" },
+  { id: "science-fiction", name: "Science-fiction",        icon: "🚀", google: "science fiction",       openlibrary: "science fiction" },
+  { id: "fantasy",         name: "Fantasy",                icon: "🐉", google: "fantasy",               openlibrary: "fantasy" },
+  { id: "manga",           name: "Mangas",                 icon: "🎌", google: "manga",                 openlibrary: "manga" },
+  { id: "bd",              name: "Bandes dessinées",       icon: "💬", google: "comics",                openlibrary: "comic books, strips" },
+  { id: "jeunesse",        name: "Jeunesse",               icon: "🧸", google: "juvenile fiction",      openlibrary: "juvenile fiction" },
+  { id: "young-adult",     name: "Young Adult",            icon: "🎒", google: "young adult fiction",   openlibrary: "young adult fiction" },
+  { id: "romance",         name: "Romance",                icon: "💕", google: "romance",               openlibrary: "romance" },
+  { id: "horreur",         name: "Horreur",                icon: "👻", google: "horror",                openlibrary: "horror" },
+  { id: "classiques",      name: "Classiques",             icon: "🏛️", google: "classics",              openlibrary: "classic literature" },
+  { id: "poesie",          name: "Poésie",                 icon: "🪶", google: "poetry",                openlibrary: "poetry" },
+  { id: "theatre",         name: "Théâtre",                icon: "🎭", google: "drama",                 openlibrary: "drama" },
+  { id: "histoire",        name: "Histoire",               icon: "🏰", google: "history",               openlibrary: "history" },
+  { id: "biographies",     name: "Biographies",            icon: "👤", google: "biography",             openlibrary: "biography" },
+  { id: "philosophie",     name: "Philosophie",            icon: "🤔", google: "philosophy",            openlibrary: "philosophy" },
+  { id: "sciences",        name: "Sciences",               icon: "🔬", google: "science",               openlibrary: "science" },
+  { id: "psychologie",     name: "Psychologie",            icon: "🧠", google: "psychology",            openlibrary: "psychology" },
+  { id: "dev-perso",       name: "Développement personnel",icon: "🌱", google: "self-help",             openlibrary: "self-help" },
+  { id: "economie",        name: "Économie & Business",    icon: "💼", google: "business",              openlibrary: "business" },
+  { id: "cuisine",         name: "Cuisine",                icon: "🍳", google: "cooking",               openlibrary: "cooking" },
+  { id: "art",             name: "Art & Photo",            icon: "🎨", google: "art",                   openlibrary: "art" },
+  { id: "voyage",          name: "Voyage",                 icon: "🧭", google: "travel",                openlibrary: "travel" },
+  { id: "religion",        name: "Religion & Spiritualité",icon: "🕊️", google: "religion",              openlibrary: "religion" },
+  { id: "informatique",    name: "Informatique",           icon: "💻", google: "computers",             openlibrary: "computers" },
+  { id: "humour",          name: "Humour",                 icon: "😂", google: "humor",                 openlibrary: "humor" },
+  { id: "sport",           name: "Sport",                  icon: "⚽", google: "sports",                openlibrary: "sports" },
+  { id: "sante",           name: "Santé & Bien-être",      icon: "🩺", google: "health",                openlibrary: "health" },
+];
+
+// Auteurs mis en avant (toute autre recherche par auteur reste possible).
+const FEATURED_AUTHORS = [
+  { name: "Victor Hugo",           tag: "Classiques" },
+  { name: "Albert Camus",          tag: "Classiques" },
+  { name: "Émile Zola",            tag: "Classiques" },
+  { name: "Alexandre Dumas",       tag: "Classiques" },
+  { name: "Jules Verne",           tag: "Aventure" },
+  { name: "Antoine de Saint-Exupéry", tag: "Classiques" },
+  { name: "Marcel Proust",         tag: "Classiques" },
+  { name: "Annie Ernaux",          tag: "Littérature" },
+  { name: "Michel Houellebecq",    tag: "Littérature" },
+  { name: "Guillaume Musso",       tag: "Roman" },
+  { name: "Joël Dicker",           tag: "Thriller" },
+  { name: "Fred Vargas",           tag: "Policier" },
+  { name: "Franck Thilliez",       tag: "Thriller" },
+  { name: "Bernard Werber",        tag: "Science-fiction" },
+  { name: "Pierre Lemaitre",       tag: "Roman" },
+  { name: "Amélie Nothomb",        tag: "Roman" },
+  { name: "Eiichiro Oda",          tag: "Manga" },
+  { name: "Masashi Kishimoto",     tag: "Manga" },
+  { name: "Akira Toriyama",        tag: "Manga" },
+  { name: "Hajime Isayama",        tag: "Manga" },
+  { name: "Naoki Urasawa",         tag: "Manga" },
+  { name: "Goscinny",              tag: "BD" },
+  { name: "Hergé",                 tag: "BD" },
+  { name: "Riad Sattouf",          tag: "BD" },
+  { name: "J.K. Rowling",          tag: "Fantasy" },
+  { name: "Stephen King",          tag: "Horreur" },
+  { name: "Agatha Christie",       tag: "Policier" },
+  { name: "J.R.R. Tolkien",        tag: "Fantasy" },
+  { name: "George Orwell",         tag: "Classiques" },
+  { name: "Haruki Murakami",       tag: "Roman" },
+];
+
+// Librairies en ligne. "url" reçoit la requête (ISBN si disponible, sinon titre + auteur).
+const STORES = [
+  { id: "leslibraires", name: "Leslibraires.fr",     url: q => `https://www.leslibraires.fr/recherche/?q=${q}` },
+  { id: "fnac",         name: "Fnac",                url: q => `https://www.fnac.com/SearchResult/ResultList.aspx?Search=${q}&sft=1&sa=0` },
+  { id: "amazon",       name: "Amazon.fr",           url: q => `https://www.amazon.fr/s?k=${q}&i=stripbooks` },
+  { id: "decitre",      name: "Decitre",             url: q => `https://www.decitre.fr/rechercher/result?q=${q}` },
+  { id: "cultura",      name: "Cultura",             url: q => `https://www.cultura.com/search/results?search_query=${q}` },
+  { id: "placedeslib",  name: "Place des Libraires", url: q => `https://www.placedeslibraires.fr/listeliv.php?base=allbooks&mots_recherche=${q}` },
+  { id: "rakuten",      name: "Rakuten",             url: q => `https://fr.shopping.rakuten.com/search/${q}` },
+];
