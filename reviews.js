@@ -4,8 +4,9 @@
  *  Notes et commentaires des lecteurs
  *
  *  - Si FIREBASE_PROJECT_ID est renseigné dans data.js, les avis sont
- *    enregistrés dans Cloud Firestore et visibles par tous les visiteurs
- *    (API REST, sans bibliothèque à charger).
+ *    enregistrés dans Cloud Firestore (API REST) et visibles par tous.
+ *    Il faut alors être connecté à un compte pour publier un avis
+ *    (un avis par compte et par livre, supprimable par son auteur).
  *  - Sinon, ils sont enregistrés uniquement dans le navigateur du visiteur.
  * ========================================================================= */
 
@@ -30,7 +31,7 @@ const localReviews = {
     try { return JSON.parse(localStorage.getItem("bibliofr.reviews") || "{}"); } catch { return {}; }
   },
   async list(key) {
-    return this.read()[key] || [];
+    return (this.read()[key] || []).map((r, i) => ({ ...r, id: String(i), mine: true }));
   },
   async add(key, review) {
     const all = this.read();
@@ -38,48 +39,85 @@ const localReviews = {
     try { localStorage.setItem("bibliofr.reviews", JSON.stringify(all)); }
     catch { throw new Error("Impossible d'enregistrer l'avis dans ce navigateur."); }
   },
+  async remove(key, review) {
+    const all = this.read();
+    (all[key] || []).splice(Number(review.id), 1);
+    try { localStorage.setItem("bibliofr.reviews", JSON.stringify(all)); } catch { /* stockage indisponible */ }
+  },
 };
 
 /* ---------- Stockage partagé (Cloud Firestore) --------------------------- */
 
-const firestoreReviews = {
-  shared: true,
+const firestore = {
   base() {
     return `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
   },
-  key() {
+  apiKey() {
     return FIREBASE_API_KEY || GOOGLE_API_KEY;
   },
-  async list(key) {
-    const res = await fetch(`${this.base()}:runQuery?key=${this.key()}`, {
+  async request(url, options = {}) {
+    const headers = { "Content-Type": "application/json" };
+    const token = await getIdToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const sep = url.includes("?") ? "&" : "?";
+    const res = await fetch(`${url}${sep}key=${this.apiKey()}`, { ...options, headers });
+    if (!res.ok) {
+      const status = res.status;
+      throw new Error(status === 403
+        ? "Action refusée. Vérifiez que vous êtes connecté, puis réessayez."
+        : status === 409
+          ? "Vous avez déjà donné votre avis sur ce livre."
+          : `Le service des avis ne répond pas (erreur ${status}). Réessayez plus tard.`);
+    }
+    return res.status === 204 ? null : res.json();
+  },
+  async query(field, value) {
+    const rows = await this.request(`${this.base()}:runQuery`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         structuredQuery: {
           from: [{ collectionId: "reviews" }],
-          where: { fieldFilter: { field: { fieldPath: "bookKey" }, op: "EQUAL", value: { stringValue: key } } },
-          limit: 200,
+          where: { fieldFilter: { field: { fieldPath: field }, op: "EQUAL", value: { stringValue: value } } },
+          limit: 300,
         },
       }),
     });
-    if (!res.ok) throw new Error(`Avis indisponibles (erreur ${res.status}).`);
-    const rows = await res.json();
+    const uid = currentUser() && currentUser().uid;
     return rows.filter(r => r.document).map(r => {
       const f = r.document.fields || {};
       return {
+        path: r.document.name,
+        uid: f.uid?.stringValue || "",
+        bookKey: f.bookKey?.stringValue || "",
+        title: f.title?.stringValue || "",
         rating: Number(f.rating?.integerValue || 0),
         name: f.name?.stringValue || "",
         comment: f.comment?.stringValue || "",
         createdAt: f.createdAt?.timestampValue || "",
+        mine: Boolean(uid && f.uid?.stringValue === uid),
       };
     });
   },
+};
+
+const firestoreReviews = {
+  shared: true,
+  list(key) {
+    return firestore.query("bookKey", key);
+  },
+  listByUser(uid) {
+    return firestore.query("uid", uid);
+  },
   async add(key, review, book) {
-    const res = await fetch(`${this.base()}/reviews?key=${this.key()}`, {
+    const user = currentUser();
+    if (!user) throw new Error("Connectez-vous pour publier un avis.");
+    // L'identifiant du document (compte + livre) garantit un seul avis par compte et par livre.
+    const docId = encodeURIComponent(`${user.uid}__${key}`);
+    await firestore.request(`${firestore.base()}/reviews?documentId=${docId}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         fields: {
+          uid: { stringValue: user.uid },
           bookKey: { stringValue: key },
           title: { stringValue: book.title.slice(0, 300) },
           rating: { integerValue: String(review.rating) },
@@ -89,27 +127,17 @@ const firestoreReviews = {
         },
       }),
     });
-    if (!res.ok) throw new Error(`L'avis n'a pas pu être publié (erreur ${res.status}). Réessayez plus tard.`);
+  },
+  async remove(key, review) {
+    // review.path = "projects/…/documents/reviews/<id>"
+    const id = review.path.split("/documents/")[1];
+    await firestore.request(`${firestore.base()}/${id.split("/").map(p => encodeURIComponent(decodeURIComponent(p))).join("/")}`, { method: "DELETE" });
   },
 };
 
 const reviewStore = FIREBASE_PROJECT_ID ? firestoreReviews : localReviews;
 
 /* ---------- Affichage ----------------------------------------------------- */
-
-// Mémorise dans le navigateur les livres déjà notés, pour éviter les doublons.
-const myReviews = {
-  has(key) {
-    try { return JSON.parse(localStorage.getItem("bibliofr.myReviews") || "[]").includes(key); } catch { return false; }
-  },
-  add(key) {
-    try {
-      const list = JSON.parse(localStorage.getItem("bibliofr.myReviews") || "[]");
-      list.push(key);
-      localStorage.setItem("bibliofr.myReviews", JSON.stringify(list));
-    } catch { /* stockage indisponible */ }
-  },
-};
 
 function starsHtml(rating, label = true) {
   const full = Math.round(rating);
@@ -126,7 +154,36 @@ function reviewsSectionHtml() {
   return `<section class="reviews" id="reviews"><h3>Avis des lecteurs</h3><div class="reviews-body">${loadingHtml}</div></section>`;
 }
 
+function reviewFormHtml() {
+  const user = currentUser();
+  return `<form class="review-form" novalidate>
+      <p class="star-label" aria-hidden="true">Votre note</p>
+      <fieldset class="star-input">
+        <legend class="sr-only">Votre note</legend>
+        ${[5, 4, 3, 2, 1].map(n => `
+          <input type="radio" name="rating" id="rate-${n}" value="${n}">
+          <label for="rate-${n}" title="${n} étoile${n > 1 ? "s" : ""}">★</label>`).join("")}
+      </fieldset>
+      ${reviewStore.shared
+        ? `<p class="muted small">Publié en tant que <strong>${esc(displayName(user))}</strong></p>`
+        : `<label class="field">Votre nom (facultatif)
+            <input id="review-name" maxlength="${MAX_NAME}" placeholder="Anonyme" autocomplete="nickname">
+          </label>`}
+      <label class="field">Votre commentaire (facultatif)
+        <textarea id="review-comment" rows="4" maxlength="${MAX_COMMENT}"
+                  placeholder="Qu'avez-vous pensé de ce livre ?"></textarea>
+      </label>
+      <p class="form-error error" hidden></p>
+      <button type="submit" class="buy-btn">Publier mon avis</button>
+      ${reviewStore.shared ? "" : `<p class="muted small">Les avis sont enregistrés uniquement dans votre navigateur.</p>`}
+    </form>`;
+}
+
+// Livre dont les avis sont affichés, pour les recharger quand on se connecte ou se déconnecte.
+let reviewsShown = null;
+
 async function loadReviews(book, container) {
+  reviewsShown = { book, container };
   const key = reviewKey(book);
   const body = container.querySelector(".reviews-body");
   let reviews = [];
@@ -140,7 +197,22 @@ async function loadReviews(book, container) {
   reviews.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 
   const avg = reviews.length ? reviews.reduce((n, r) => n + r.rating, 0) / reviews.length : 0;
-  const alreadyReviewed = myReviews.has(key);
+  const mine = reviews.find(r => r.mine);
+
+  let formArea;
+  if (!reviewStore.shared) {
+    formArea = reviewFormHtml();
+  } else if (!currentUser()) {
+    formArea = `<div class="review-login">
+        <p>Connectez-vous pour noter ce livre et laisser un commentaire.</p>
+        <button type="button" class="buy-btn" data-auth="login">Se connecter</button>
+        <button type="button" class="link-btn" data-auth="signup">Créer un compte</button>
+      </div>`;
+  } else if (mine) {
+    formArea = `<p class="muted small">Vous avez déjà donné votre avis sur ce livre.</p>`;
+  } else {
+    formArea = reviewFormHtml();
+  }
 
   body.innerHTML = `
     ${error ? `<p class="error">${esc(error)}</p>` : ""}
@@ -150,40 +222,36 @@ async function loadReviews(book, container) {
            <span class="muted">/ 5 · ${reviews.length} avis</span>`
         : `<span class="muted">Aucun avis pour l'instant. Soyez le premier à donner le vôtre.</span>`}
     </div>
-
-    ${alreadyReviewed
-      ? `<p class="muted small">Vous avez déjà donné votre avis sur ce livre.</p>`
-      : `<form class="review-form" novalidate>
-          <p class="star-label" aria-hidden="true">Votre note</p>
-          <fieldset class="star-input">
-            <legend class="sr-only">Votre note</legend>
-            ${[5, 4, 3, 2, 1].map(n => `
-              <input type="radio" name="rating" id="rate-${n}" value="${n}">
-              <label for="rate-${n}" title="${n} étoile${n > 1 ? "s" : ""}">★</label>`).join("")}
-          </fieldset>
-          <label class="field">Votre nom (facultatif)
-            <input id="review-name" name="name" maxlength="${MAX_NAME}" placeholder="Anonyme" autocomplete="nickname">
-          </label>
-          <label class="field">Votre commentaire (facultatif)
-            <textarea id="review-comment" name="comment" rows="4" maxlength="${MAX_COMMENT}"
-                      placeholder="Qu'avez-vous pensé de ce livre ?"></textarea>
-          </label>
-          <p class="form-error error" hidden></p>
-          <button type="submit" class="buy-btn">Publier mon avis</button>
-          ${reviewStore.shared ? "" : `<p class="muted small">Les avis sont pour l'instant enregistrés uniquement dans votre navigateur.</p>`}
-        </form>`}
-
+    ${formArea}
     <ul class="review-list">
-      ${reviews.map(r => `
+      ${reviews.map((r, i) => `
         <li>
           <div class="review-head">
             ${starsHtml(r.rating)}
             <strong>${esc(r.name || "Anonyme")}</strong>
+            ${r.mine && reviewStore.shared ? `<span class="badge">Vous</span>` : ""}
             <span class="muted small">${esc(formatDate(r.createdAt))}</span>
+            ${r.mine ? `<button type="button" class="link-btn danger" data-delete-review="${i}">Supprimer</button>` : ""}
           </div>
           ${r.comment ? `<p>${esc(r.comment)}</p>` : ""}
         </li>`).join("")}
     </ul>`;
+
+  body.querySelectorAll("[data-delete-review]").forEach(btn => btn.addEventListener("click", async () => {
+    if (btn.dataset.confirm !== "1") {
+      btn.dataset.confirm = "1";
+      btn.textContent = "Confirmer la suppression";
+      return;
+    }
+    btn.disabled = true;
+    try {
+      await reviewStore.remove(key, reviews[Number(btn.dataset.deleteReview)]);
+      loadReviews(book, container);
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = err.message;
+    }
+  }));
 
   const form = body.querySelector(".review-form");
   if (!form) return;
@@ -196,18 +264,18 @@ async function loadReviews(book, container) {
       errorEl.hidden = false;
       return;
     }
+    const nameInput = form.querySelector("#review-name");
     const review = {
       rating,
-      name: form.querySelector("#review-name").value.trim().slice(0, MAX_NAME),
+      name: (nameInput ? nameInput.value.trim() : displayName(currentUser())).slice(0, MAX_NAME),
       comment: form.querySelector("#review-comment").value.trim().slice(0, MAX_COMMENT),
       createdAt: new Date().toISOString(),
     };
-    const button = form.querySelector("button");
+    const button = form.querySelector("button[type=submit]");
     button.disabled = true;
     button.textContent = "Publication…";
     try {
       await reviewStore.add(key, review, book);
-      myReviews.add(key);
       loadReviews(book, container);
     } catch (err) {
       errorEl.textContent = err.message;
@@ -217,3 +285,10 @@ async function loadReviews(book, container) {
     }
   });
 }
+
+// Recharge les avis affichés quand l'état de connexion change.
+onAuthChange(() => {
+  if (reviewsShown && document.body.contains(reviewsShown.container)) {
+    loadReviews(reviewsShown.book, reviewsShown.container);
+  }
+});

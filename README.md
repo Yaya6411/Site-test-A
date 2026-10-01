@@ -76,3 +76,22 @@ titre + auteur, donc partagés entre les différentes éditions d'un même livre
    **Cloud Firestore API** dans **Restrictions d'API** (à côté de Books API).
 5. Dans `data.js`, renseigner `const FIREBASE_PROJECT_ID = "identifiant-du-projet";`
    (visible dans Firebase → ⚙️ Paramètres du projet).
+
+## Comptes utilisateurs
+
+Création de compte par e-mail + mot de passe ou avec Google (Firebase Authentication), connexion,
+mot de passe oublié et page **Mon compte** (pseudo, vérification de l'e-mail, liste et suppression de ses
+avis, déconnexion, suppression du compte). Quand les avis partagés sont activés, il faut être connecté
+pour publier un avis : un seul avis par compte et par livre, que seul son auteur peut supprimer.
+
+La bibliothèque Firebase (version 12.19.0, licence Apache 2.0) est incluse dans `vendor/`.
+
+### Activer les comptes
+
+1. Firebase → **Build → Authentication → Commencer**.
+2. Onglet **Sign-in method** : activer **Adresse e-mail/Mot de passe** et **Google**.
+3. Onglet **Paramètres → Domaines autorisés** : ajouter `yaya6411.github.io`.
+4. Clé API (console Google Cloud → Identifiants) :
+   - **Restrictions d'API** : ajouter **Identity Toolkit API** et **Token Service API** ;
+   - **Sites Web** : ajouter `https://test-biblio-998a1.firebaseapp.com/*` (utilisé par la connexion Google).
+5. Firestore → **Règles** : publier le nouveau contenu de `firestore.rules`.

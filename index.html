@@ -25,6 +25,7 @@
         <a href="#/genres">Genres</a>
         <a href="#/auteurs">Auteurs</a>
         <button id="settings-btn" class="icon-btn" title="Préférences" aria-label="Préférences">⚙️</button>
+        <span id="account-area"></span>
       </nav>
     </div>
   </header>
@@ -34,6 +35,11 @@
   <dialog id="book-dialog" class="dialog">
     <button class="dialog-close" data-close aria-label="Fermer">✕</button>
     <div id="book-detail"></div>
+  </dialog>
+
+  <dialog id="auth-dialog" class="dialog small">
+    <button class="dialog-close" data-close aria-label="Fermer">✕</button>
+    <div id="auth-content"></div>
   </dialog>
 
   <dialog id="settings-dialog" class="dialog small">
@@ -62,7 +68,10 @@
   </footer>
 
   <script src="data.js"></script>
+  <script src="vendor/firebase-app-compat.js"></script>
+  <script src="vendor/firebase-auth-compat.js"></script>
   <script src="app.js"></script>
+  <script src="auth.js"></script>
   <script src="reviews.js"></script>
 </body>
 </html>

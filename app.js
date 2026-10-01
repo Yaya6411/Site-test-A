@@ -548,6 +548,8 @@ function route() {
       return viewGenres();
     case "auteurs":
       return viewAuthors();
+    case "compte":
+      return viewAccount();
     case "genre": {
       const genre = GENRES.find(g => g.id === arg);
       if (!genre) return viewNotFound();
@@ -617,4 +619,5 @@ prefSource.addEventListener("change", () => { prefs.set("source", prefSource.val
 prefStore.addEventListener("change", () => { prefs.set("store", prefStore.value); route(); });
 
 window.addEventListener("hashchange", route);
-route();
+// Premier affichage une fois tous les scripts chargés (auth.js fournit la page « Mon compte »).
+document.addEventListener("DOMContentLoaded", route);
