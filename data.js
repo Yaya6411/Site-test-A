@@ -1,3 +1,7 @@
+// Clé API Google Books (gratuite). Sans clé, Google partage un quota journalier
+// entre tous les sites et refuse souvent de répondre. Voir le README pour la créer.
+const GOOGLE_API_KEY = "";
+
 // Données statiques : genres, auteurs mis en avant et librairies en ligne.
 
 // Genres regroupés par famille. Chaque genre indique la requête à utiliser

@@ -42,3 +42,18 @@ Le site peut être publié tel quel sur GitHub Pages, Netlify, Vercel…
 | `style.css`  | Mise en forme                                          |
 | `data.js`    | Genres, auteurs mis en avant et librairies en ligne    |
 | `app.js`     | Routage, appels aux API, affichage                     |
+
+## Clé API Google Books (recommandée)
+
+Sans clé, Google Books partage un quota journalier entre tous les sites qui l'appellent sans clé, et il est
+généralement épuisé (erreur 429). Le site bascule alors sur Open Library, mais avec moins de résultats.
+
+1. Aller sur https://console.cloud.google.com/ et créer un projet (gratuit).
+2. Menu **API et services → Bibliothèque** : rechercher **Books API** et cliquer sur **Activer**.
+3. Menu **API et services → Identifiants** : **Créer des identifiants → Clé API**.
+4. Restreindre la clé (recommandé) : **Restrictions d'application → Sites web**, ajouter
+   `https://yaya6411.github.io/*` ; **Restrictions d'API → Books API**.
+5. Coller la clé dans `data.js` : `const GOOGLE_API_KEY = "votre-clé";`
+
+La clé est visible dans le code du site : c'est normal pour cette API, la restriction au domaine empêche
+qu'elle soit utilisée ailleurs.

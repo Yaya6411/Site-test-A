@@ -36,9 +36,12 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
 const enc = encodeURIComponent;
 const authorLink = name => `#/auteur/${enc(name)}`;
 
+// Les librairies cherchent par titre + auteur : la recherche par ISBN renvoie
+// souvent une page vide quand le revendeur ne connaît pas cette édition précise.
 function storeUrl(store, book) {
-  const query = book.isbn || [book.title, book.authors[0]].filter(Boolean).join(" ");
-  return store.url(enc(query));
+  const title = book.title.split(" — ")[0].replace(/[«»"]/g, "").trim();
+  const author = (book.authors[0] || "").replace(/\(.*?\)/g, "").trim();
+  return store.url(enc([title, author].filter(Boolean).join(" ")));
 }
 
 /* ---------- Sources de données ------------------------------------------ */
@@ -64,8 +67,13 @@ const sources = {
         startIndex: page * PAGE_SIZE,
         orderBy: sort === "new" ? "newest" : "relevance",
       });
+      if (GOOGLE_API_KEY) params.set("key", GOOGLE_API_KEY);
       const res = await fetch(`https://www.googleapis.com/books/v1/volumes?${params}`);
-      if (!res.ok) throw new Error(`Google Books : erreur ${res.status}`);
+      if (!res.ok) {
+        throw new Error(res.status === 429 && !GOOGLE_API_KEY
+          ? "Google Books : quota gratuit épuisé, une clé API est nécessaire"
+          : `Google Books : erreur ${res.status}`);
+      }
       const data = await res.json();
       const raw = data.items || [];
       const books = raw
@@ -82,7 +90,9 @@ const sources = {
         language: "fre",
         limit: PAGE_SIZE,
         page: page + 1,
-        fields: "key,title,subtitle,author_name,first_publish_year,isbn,cover_i,subject,publisher,number_of_pages_median",
+        // "editions" renvoie l'édition qui correspond au filtre de langue (la version française).
+        fields: "key,title,subtitle,author_name,first_publish_year,isbn,cover_i,subject,publisher,number_of_pages_median," +
+                "editions,editions.key,editions.title,editions.subtitle,editions.isbn,editions.cover_i,editions.publisher,editions.publish_date",
       });
       const { type, value } = query;
       if (type === "genre") params.set("subject", value.openlibrary);
@@ -115,16 +125,20 @@ function isbn13to10(isbn) {
   return core + (check === 10 ? "X" : String(check));
 }
 
-function coverCandidates(isbn, primary) {
-  const list = [];
-  if (primary) list.push(primary);
+function coverCandidates(isbn, ...primary) {
+  const list = primary.filter(Boolean);
   const clean = (isbn || "").replace(/[^0-9Xx]/g, "");
   if (clean) {
-    list.push(`https://covers.openlibrary.org/b/isbn/${clean}-M.jpg?default=false`);
+    list.push(`https://covers.openlibrary.org/b/isbn/${clean}-L.jpg?default=false`);
     const isbn10 = clean.length === 10 ? clean : isbn13to10(clean);
-    if (isbn10) list.push(`https://images-na.ssl-images-amazon.com/images/P/${isbn10}.01.MZZZZZZZ.jpg`);
+    if (isbn10) list.push(`https://images-na.ssl-images-amazon.com/images/P/${isbn10}.01.LZZZZZZZ.jpg`);
   }
   return [...new Set(list)];
+}
+
+// Version haute définition des vignettes Google Books.
+function googleCoverHd(url) {
+  return url.replace(/^http:/, "https:").replace("&edge=curl", "") + "&fife=w480-h720";
 }
 
 function normalizeGoogle(item) {
@@ -142,26 +156,32 @@ function normalizeGoogle(item) {
     categories: v.categories || [],
     description: (v.description || "").replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""),
     isbn,
-    covers: coverCandidates(isbn, cover && cover.replace(/^http:/, "https:").replace("&edge=curl", "")),
+    covers: coverCandidates(isbn, cover && googleCoverHd(cover), cover && googleCoverHd(cover).replace(/&fife=[^&]*$/, "")),
     link: v.infoLink || "",
   };
 }
 
 function normalizeOpenLibrary(doc) {
-  const isbns = doc.isbn || [];
-  const isbn = isbns.find(i => i.length === 13 && i.startsWith("978")) || isbns[0] || "";
+  // Édition française si Open Library la fournit, sinon l'œuvre générale.
+  const ed = (doc.editions && doc.editions.docs && doc.editions.docs[0]) || {};
+  const isbns = [...(ed.isbn || []), ...(doc.isbn || [])];
+  const isbn = isbns.find(i => /^97[89]2/.test(i)) || isbns.find(i => i.length === 13) || isbns[0] || "";
+  const title = ed.title || doc.title;
+  const subtitle = ed.title ? ed.subtitle : doc.subtitle;
+  const year = ((ed.publish_date || [])[0] || "").match(/\d{4}/);
+  const covers = [ed.cover_i, doc.cover_i].filter(Boolean).map(id => `https://covers.openlibrary.org/b/id/${id}-L.jpg`);
   return {
     id: "ol-" + doc.key.replace(/\//g, "_"),
-    title: doc.title + (doc.subtitle ? " — " + doc.subtitle : ""),
+    title: title + (subtitle ? " — " + subtitle : ""),
     authors: doc.author_name || [],
-    year: doc.first_publish_year ? String(doc.first_publish_year) : "",
-    publisher: (doc.publisher || [])[0] || "",
+    year: year ? year[0] : (doc.first_publish_year ? String(doc.first_publish_year) : ""),
+    publisher: (ed.publisher || doc.publisher || [])[0] || "",
     pages: doc.number_of_pages_median || "",
     categories: (doc.subject || []).slice(0, 6),
     description: "",
     isbn,
-    covers: coverCandidates(isbn, doc.cover_i && `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg`),
-    link: "https://openlibrary.org" + doc.key,
+    covers: coverCandidates(isbn, covers[0], covers[1]),
+    link: "https://openlibrary.org" + (ed.key || doc.key),
   };
 }
 
@@ -215,6 +235,7 @@ async function searchBooks(query, page = 0, sort = "relevance") {
       total: ok.reduce((n, r) => n + r.total, 0),
       hasMore: ok.some(r => r.hasMore),
       sourceLabel: ok.map(r => sources[r.name].label).join(" + "),
+      warnings: settled.filter(r => r.status === "rejected").map(r => r.reason.message),
     };
   }
 
@@ -223,7 +244,7 @@ async function searchBooks(query, page = 0, sort = "relevance") {
   for (const name of order.filter(isUp).length ? order.filter(isUp) : order) {
     try {
       const result = await fetchFrom(name, query, page, sort);
-      return { ...result, sourceLabel: sources[name].label };
+      return { ...result, sourceLabel: sources[name].label, warnings: lastError ? [lastError.message] : [] };
     } catch (err) {
       lastError = err;
     }
@@ -420,7 +441,7 @@ function viewResults({ title, subtitle = "", query }) {
     moreBtn.hidden = true;
     status.innerHTML = loadingHtml;
     try {
-      const { books, total, hasMore, sourceLabel } = await searchBooks(query, page, sort);
+      const { books, total, hasMore, sourceLabel, warnings = [] } = await searchBooks(query, page, sort);
       if (current !== token) return;
       const fresh = books.filter(b => !seen.has(b.id));
       fresh.forEach(b => seen.add(b.id));
@@ -428,7 +449,7 @@ function viewResults({ title, subtitle = "", query }) {
       status.innerHTML = seen.size === 0
         ? `<p class="empty">Aucun livre en français trouvé. Essayez une autre orthographe ou changez de source dans les préférences ⚙️.</p>`
         : "";
-      if (total) count.textContent = `Environ ${total.toLocaleString("fr-FR")} résultats · source : ${sourceLabel}`;
+      if (total) count.textContent = `Environ ${total.toLocaleString("fr-FR")} résultats · source : ${sourceLabel}${warnings.length ? " · " + warnings.join(" · ") : ""}`;
       moreBtn.textContent = "Charger plus de livres";
       moreBtn.hidden = !hasMore;
     } catch (err) {
