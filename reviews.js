@@ -39,6 +39,13 @@ const localReviews = {
     try { localStorage.setItem("bibliofr.reviews", JSON.stringify(all)); }
     catch { throw new Error("Impossible d'enregistrer l'avis dans ce navigateur."); }
   },
+  async update(key, review, changes) {
+    const all = this.read();
+    const target = (all[key] || [])[Number(review.id)];
+    if (target) Object.assign(target, changes);
+    try { localStorage.setItem("bibliofr.reviews", JSON.stringify(all)); }
+    catch { throw new Error("Impossible d'enregistrer la modification dans ce navigateur."); }
+  },
   async remove(key, review) {
     const all = this.read();
     (all[key] || []).splice(Number(review.id), 1);
@@ -94,6 +101,7 @@ const firestore = {
         name: f.name?.stringValue || "",
         comment: f.comment?.stringValue || "",
         createdAt: f.createdAt?.timestampValue || "",
+        updatedAt: f.updatedAt?.timestampValue || "",
         mine: Boolean(uid && f.uid?.stringValue === uid),
       };
     });
@@ -128,10 +136,26 @@ const firestoreReviews = {
       }),
     });
   },
-  async remove(key, review) {
-    // review.path = "projects/…/documents/reviews/<id>"
+  // review.path = "projects/…/documents/reviews/<id>"
+  docUrl(review) {
     const id = review.path.split("/documents/")[1];
-    await firestore.request(`${firestore.base()}/${id.split("/").map(p => encodeURIComponent(decodeURIComponent(p))).join("/")}`, { method: "DELETE" });
+    return `${firestore.base()}/${id.split("/").map(p => encodeURIComponent(decodeURIComponent(p))).join("/")}`;
+  },
+  async update(key, review, changes) {
+    const mask = ["rating", "comment", "updatedAt"].map(f => `updateMask.fieldPaths=${f}`).join("&");
+    await firestore.request(`${this.docUrl(review)}?${mask}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        fields: {
+          rating: { integerValue: String(changes.rating) },
+          comment: { stringValue: changes.comment },
+          updatedAt: { timestampValue: changes.updatedAt },
+        },
+      }),
+    });
+  },
+  async remove(key, review) {
+    await firestore.request(this.docUrl(review), { method: "DELETE" });
   },
 };
 
@@ -148,6 +172,64 @@ function starsHtml(rating, label = true) {
 function formatDate(iso) {
   const d = new Date(iso);
   return isNaN(d) ? "" : d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+}
+
+// Date de publication, et de dernière modification s'il y en a une.
+function reviewDateHtml(r) {
+  const edited = r.updatedAt && r.updatedAt !== r.createdAt
+    ? ` · modifié le ${esc(formatDate(r.updatedAt))}` : "";
+  return `<span class="muted small">${esc(formatDate(r.createdAt))}${edited}</span>`;
+}
+
+// Remplace un avis affiché par un formulaire de modification (note + commentaire).
+// onSave(changes) doit renvoyer une promesse ; onCancel réaffiche la liste.
+function openReviewEditor(li, review, onSave, onCancel) {
+  li.innerHTML = `
+    <form class="review-form review-edit" novalidate>
+      <p class="star-label" aria-hidden="true">Votre note</p>
+      <fieldset class="star-input">
+        <legend class="sr-only">Votre note</legend>
+        ${[5, 4, 3, 2, 1].map(n => `
+          <input type="radio" name="edit-rating" id="edit-rate-${n}" value="${n}"${n === review.rating ? " checked" : ""}>
+          <label for="edit-rate-${n}" title="${n} étoile${n > 1 ? "s" : ""}">★</label>`).join("")}
+      </fieldset>
+      <label class="field">Votre commentaire (facultatif)
+        <textarea id="edit-comment" rows="4" maxlength="${MAX_COMMENT}">${esc(review.comment || "")}</textarea>
+      </label>
+      <p class="form-error error" hidden></p>
+      <div class="edit-actions">
+        <button type="submit" class="buy-btn">Enregistrer</button>
+        <button type="button" class="link-btn" data-cancel-edit>Annuler</button>
+      </div>
+    </form>`;
+  const form = li.querySelector("form");
+  form.querySelector("textarea").focus();
+  form.querySelector("[data-cancel-edit]").addEventListener("click", onCancel);
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    const errorEl = form.querySelector(".form-error");
+    const rating = Number((form.querySelector("input[name=edit-rating]:checked") || {}).value || 0);
+    if (!rating) {
+      errorEl.textContent = "Choisissez une note de 1 à 5 étoiles.";
+      errorEl.hidden = false;
+      return;
+    }
+    const button = form.querySelector("button[type=submit]");
+    button.disabled = true;
+    button.textContent = "Enregistrement…";
+    try {
+      await onSave({
+        rating,
+        comment: form.querySelector("#edit-comment").value.trim().slice(0, MAX_COMMENT),
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+      button.disabled = false;
+      button.textContent = "Enregistrer";
+    }
+  });
 }
 
 function reviewsSectionHtml() {
@@ -209,7 +291,7 @@ async function loadReviews(book, container) {
         <button type="button" class="link-btn" data-auth="signup">Créer un compte</button>
       </div>`;
   } else if (mine) {
-    formArea = `<p class="muted small">Vous avez déjà donné votre avis sur ce livre.</p>`;
+    formArea = `<p class="muted small">Vous avez déjà donné votre avis sur ce livre. Vous pouvez le modifier ci-dessous.</p>`;
   } else {
     formArea = reviewFormHtml();
   }
@@ -230,12 +312,20 @@ async function loadReviews(book, container) {
             ${starsHtml(r.rating)}
             ${profileLink(r.uid, r.name)}
             ${r.mine && reviewStore.shared ? `<span class="badge">Vous</span>` : ""}
-            <span class="muted small">${esc(formatDate(r.createdAt))}</span>
-            ${r.mine ? `<button type="button" class="link-btn danger" data-delete-review="${i}">Supprimer</button>` : ""}
+            ${reviewDateHtml(r)}
+            ${r.mine ? `<button type="button" class="link-btn" data-edit-review="${i}">Modifier</button>
+                        <button type="button" class="link-btn danger" data-delete-review="${i}">Supprimer</button>` : ""}
           </div>
           ${r.comment ? `<p>${esc(r.comment)}</p>` : ""}
         </li>`).join("")}
     </ul>`;
+
+  body.querySelectorAll("[data-edit-review]").forEach(btn => btn.addEventListener("click", () => {
+    const review = reviews[Number(btn.dataset.editReview)];
+    openReviewEditor(btn.closest("li"), review,
+      changes => reviewStore.update(key, review, changes).then(() => loadReviews(book, container)),
+      () => loadReviews(book, container));
+  }));
 
   body.querySelectorAll("[data-delete-review]").forEach(btn => btn.addEventListener("click", async () => {
     if (btn.dataset.confirm !== "1") {

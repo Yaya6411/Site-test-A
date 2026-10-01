@@ -238,7 +238,7 @@ async function viewReader(uid) {
               <div class="review-head">
                 ${starsHtml(r.rating)}
                 <a href="#/recherche/title/${enc(r.title.split(" — ")[0])}"><strong>${esc(r.title)}</strong></a>
-                <span class="muted small">${esc(formatDate(r.createdAt))}</span>
+                ${reviewDateHtml(r)}
               </div>
               ${r.comment ? `<p>${esc(r.comment)}</p>` : ""}
             </li>`).join("")}</ul>`

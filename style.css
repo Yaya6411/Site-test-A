@@ -524,3 +524,6 @@ a.reviewer:hover { color: var(--accent); }
 .bar-track { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; }
 .bar-fill { display: block; height: 100%; background: #e3a008; border-radius: 999px; }
 .bar-count { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.review-edit { margin: 4px 0 0; }
+.edit-actions { display: flex; align-items: center; gap: 16px; }

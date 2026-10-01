@@ -16,10 +16,13 @@ service cloud.firestore {
         && request.resource.data.comment is string && request.resource.data.comment.size() <= 2000
         && request.resource.data.createdAt is timestamp;
       allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
-      // Seul le pseudo affiché peut être modifié, par l'auteur de l'avis.
+      // L'auteur peut modifier sa note, son commentaire et son pseudo affiché.
       allow update: if request.auth != null && resource.data.uid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
-        && request.resource.data.name is string && request.resource.data.name.size() <= 50;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'rating', 'comment', 'updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 50
+        && request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+        && request.resource.data.comment is string && request.resource.data.comment.size() <= 2000
+        && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is timestamp);
     }
 
     // Profils publics : pseudo et date d'inscription (jamais l'e-mail).

@@ -394,11 +394,18 @@ async function renderMyReviews(user) {
       <div class="review-head">
         ${starsHtml(r.rating)}
         <a href="#/recherche/title/${enc(r.title.split(" — ")[0])}"><strong>${esc(r.title)}</strong></a>
-        <span class="muted small">${esc(formatDate(r.createdAt))}</span>
+        ${reviewDateHtml(r)}
+        <button type="button" class="link-btn" data-my-edit="${i}">Modifier</button>
         <button type="button" class="link-btn danger" data-my-delete="${i}">Supprimer</button>
       </div>
       ${r.comment ? `<p>${esc(r.comment)}</p>` : ""}
     </li>`).join("")}</ul>`;
+  box.querySelectorAll("[data-my-edit]").forEach(btn => btn.addEventListener("click", () => {
+    const r = reviews[Number(btn.dataset.myEdit)];
+    openReviewEditor(btn.closest("li"), r,
+      changes => firestoreReviews.update(r.bookKey, r, changes).then(() => renderMyReviews(user)),
+      () => renderMyReviews(user));
+  }));
   box.querySelectorAll("[data-my-delete]").forEach(btn => btn.addEventListener("click", async () => {
     if (btn.dataset.confirm !== "1") {
       btn.dataset.confirm = "1";
