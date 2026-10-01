@@ -596,6 +596,10 @@ function route() {
       return viewRecent(arg);
     case "incontournables":
       return viewMustReads(arg);
+    case "lecteurs":
+      return viewReaders(arg);
+    case "lecteur":
+      return viewReader(arg);
     case "genre": {
       const genre = GENRES.find(g => g.id === arg);
       if (!genre) return viewNotFound();

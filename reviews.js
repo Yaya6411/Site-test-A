@@ -228,7 +228,7 @@ async function loadReviews(book, container) {
         <li>
           <div class="review-head">
             ${starsHtml(r.rating)}
-            <strong>${esc(r.name || "Anonyme")}</strong>
+            ${profileLink(r.uid, r.name)}
             ${r.mine && reviewStore.shared ? `<span class="badge">Vous</span>` : ""}
             <span class="muted small">${esc(formatDate(r.createdAt))}</span>
             ${r.mine ? `<button type="button" class="link-btn danger" data-delete-review="${i}">Supprimer</button>` : ""}

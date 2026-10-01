@@ -254,6 +254,7 @@ function viewAccount() {
   const isPassword = user.providerData.some(p => p.providerId === "password");
   app.innerHTML = `
     <h1 class="page-title">Mon compte</h1>
+    <p><a href="#/lecteur/${enc(user.uid)}">Voir mon profil public →</a></p>
     <div class="account-grid">
       <section class="account-card">
         <h2>Profil</h2>
@@ -267,6 +268,7 @@ function viewAccount() {
               : `<span class="badge">Non vérifiée</span> <button type="button" class="link-btn" id="resend-verif">Renvoyer l'e-mail de vérification</button>`}
           </p>
           <p class="form-msg small" hidden></p>
+          <p class="muted small">Votre pseudo et vos avis sont visibles par tous sur votre profil public. Votre e-mail reste privé.</p>
           <button type="submit" class="buy-btn">Enregistrer</button>
         </form>
       </section>
@@ -305,9 +307,10 @@ function viewAccount() {
     }
     try {
       await user.updateProfile({ displayName: name });
+      onProfileRenamed(user).catch(() => {});
       renderAccountButton();
       profileMsg.className = "form-msg small success";
-      profileMsg.textContent = "Pseudo enregistré. Il s'affichera sur vos prochains avis.";
+      profileMsg.textContent = "Pseudo enregistré. Il apparaît sur votre profil et vos avis.";
     } catch (err) {
       profileMsg.className = "form-msg small error";
       profileMsg.textContent = authErrorMessage(err);
@@ -355,6 +358,7 @@ function viewAccount() {
     try {
       const mine = await firestoreReviews.listByUser(user.uid);
       for (const r of mine) await firestoreReviews.remove(r.bookKey, r);
+      await deleteProfile(user.uid);
       await user.delete();
       location.hash = "#/";
     } catch (err) {

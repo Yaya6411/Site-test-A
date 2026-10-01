@@ -485,3 +485,42 @@ a.book-open:hover { text-decoration: none; }
 @media (max-width: 640px) { .search { flex: 1 1 100%; min-width: 0; } }
 .genre-card { min-width: 0; }
 .genre-card span:last-child { min-width: 0; overflow-wrap: anywhere; hyphens: auto; }
+
+/* ---------- Lecteurs ---------- */
+
+.readers-title { font-size: 1.1rem; margin: 24px 0 12px; }
+.reader-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.reader-card {
+  display: flex; align-items: center; gap: 12px; min-width: 0;
+  padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text);
+}
+.reader-card:hover { text-decoration: none; border-color: var(--accent); }
+.reader-text { display: flex; flex-direction: column; min-width: 0; }
+.reader-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.avatar.large { width: 88px; height: 88px; font-size: 2rem; }
+a.reviewer { font-weight: 700; color: var(--text); }
+a.reviewer:hover { color: var(--accent); }
+
+.profile-head {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 20px;
+  padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.profile-id .page-title { overflow-wrap: anywhere; }
+.profile-id p { margin: 4px 0; }
+.profile-stats { display: flex; gap: 24px; margin: 0; }
+.profile-stats div { text-align: center; }
+.profile-stats dt { font-size: .8rem; color: var(--muted); }
+.profile-stats dd { margin: 2px 0 0; font-size: 1.6rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) {
+  .profile-head { grid-template-columns: auto minmax(0, 1fr); padding: 16px; gap: 14px; }
+  .avatar.large { width: 64px; height: 64px; font-size: 1.5rem; }
+  .profile-stats { grid-column: 1 / -1; justify-content: space-around; }
+}
+
+.rating-bars { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; max-width: 480px; }
+.rating-bars li { display: grid; grid-template-columns: 40px 1fr 32px; align-items: center; gap: 10px; font-size: .9rem; }
+.bar-label { color: #e3a008; font-weight: 700; white-space: nowrap; }
+.bar-track { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; }
+.bar-fill { display: block; height: 100%; background: #e3a008; border-radius: 999px; }
+.bar-count { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }

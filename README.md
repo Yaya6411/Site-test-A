@@ -98,3 +98,11 @@ La bibliothèque Firebase (version 12.19.0, licence Apache 2.0) est incluse dans
    - **Restrictions d'API** : ajouter **Identity Toolkit API** et **Token Service API** ;
    - **Sites Web** : ajouter `https://test-biblio-998a1.firebaseapp.com/*` (utilisé par la connexion Google).
 5. Firestore → **Règles** : publier le nouveau contenu de `firestore.rules`.
+
+## Lecteurs et profils publics
+
+Onglet **Lecteurs** : recherche d'un lecteur par le début de son pseudo (sans tenir compte des majuscules)
+et liste des derniers inscrits. Chaque lecteur a une page de profil (`#/lecteur/<id>`) : pseudo, date
+d'inscription, nombre de livres notés et de commentaires, note moyenne, répartition des notes et liste
+de ses avis. Les pseudos sont cliquables dans les avis. Le profil public (collection `users`) ne contient
+jamais l'adresse e-mail ; il est créé à la connexion et mis à jour quand le pseudo change.
