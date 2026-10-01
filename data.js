@@ -6,7 +6,7 @@ const GOOGLE_API_KEY = "AIzaSyCrrm7C1Pwzo6FpWHagdjTs7yU-Jh5R_Qs";
 // les avis uniquement dans le navigateur de chaque visiteur. Voir le README.
 const FIREBASE_PROJECT_ID = "test-biblio-998a1";
 // Clé du projet Firebase ; si vide, GOOGLE_API_KEY est utilisée.
-const FIREBASE_API_KEY = "";
+const FIREBASE_API_KEY = "AIzaSyB7UPMwlJ28K2h4DTyBKJhm0gsBwTgqOuM";
 
 // Données statiques : genres, auteurs mis en avant et librairies en ligne.
 
