@@ -4,7 +4,7 @@ const GOOGLE_API_KEY = "AIzaSyCrrm7C1Pwzo6FpWHagdjTs7yU-Jh5R_Qs";
 
 // Avis des lecteurs partagés (Cloud Firestore). Laisser vide pour enregistrer
 // les avis uniquement dans le navigateur de chaque visiteur. Voir le README.
-const FIREBASE_PROJECT_ID = "";
+const FIREBASE_PROJECT_ID = "test-biblio-998a1";
 // Clé du projet Firebase ; si vide, GOOGLE_API_KEY est utilisée.
 const FIREBASE_API_KEY = "";
 
