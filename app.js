@@ -526,8 +526,10 @@ function openBook(id) {
         </div>
         ${book.link ? `<p class="small"><a href="${esc(book.link)}" target="_blank" rel="noopener">Fiche complète sur ${esc(sources[book.id.startsWith("g-") ? "google" : "openlibrary"].label)} ↗</a></p>` : ""}
       </div>
-    </div>`;
+    </div>
+    ${reviewsSectionHtml()}`;
   bookDialog.showModal();
+  loadReviews(book, document.getElementById("reviews"));
 }
 
 /* ---------- Routeur ------------------------------------------------------ */

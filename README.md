@@ -57,3 +57,22 @@ généralement épuisé (erreur 429). Le site bascule alors sur Open Library, ma
 
 La clé est visible dans le code du site : c'est normal pour cette API, la restriction au domaine empêche
 qu'elle soit utilisée ailleurs.
+
+## Notes et commentaires
+
+Chaque fiche livre propose une note de 1 à 5 étoiles et un commentaire. Les avis sont regroupés par
+titre + auteur, donc partagés entre les différentes éditions d'un même livre.
+
+- **Sans configuration** : les avis sont enregistrés uniquement dans le navigateur du visiteur.
+- **Avec Firebase (gratuit)** : les avis sont partagés entre tous les visiteurs.
+
+### Activer les avis partagés
+
+1. Aller sur https://console.firebase.google.com/ → **Créer un projet** → choisir le projet Google Cloud
+   existant (celui de la clé Google Books).
+2. Menu **Build → Firestore Database → Créer une base de données** (mode production, région `europe-west`).
+3. Onglet **Règles** : coller le contenu du fichier `firestore.rules` puis **Publier**.
+4. Dans https://console.cloud.google.com/apis/credentials, ouvrir la clé API et ajouter
+   **Cloud Firestore API** dans **Restrictions d'API** (à côté de Books API).
+5. Dans `data.js`, renseigner `const FIREBASE_PROJECT_ID = "identifiant-du-projet";`
+   (visible dans Firebase → ⚙️ Paramètres du projet).

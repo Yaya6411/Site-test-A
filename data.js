@@ -2,6 +2,12 @@
 // entre tous les sites et refuse souvent de répondre. Voir le README pour la créer.
 const GOOGLE_API_KEY = "AIzaSyCrrm7C1Pwzo6FpWHagdjTs7yU-Jh5R_Qs";
 
+// Avis des lecteurs partagés (Cloud Firestore). Laisser vide pour enregistrer
+// les avis uniquement dans le navigateur de chaque visiteur. Voir le README.
+const FIREBASE_PROJECT_ID = "";
+// Clé du projet Firebase ; si vide, GOOGLE_API_KEY est utilisée.
+const FIREBASE_API_KEY = "";
+
 // Données statiques : genres, auteurs mis en avant et librairies en ligne.
 
 // Genres regroupés par famille. Chaque genre indique la requête à utiliser

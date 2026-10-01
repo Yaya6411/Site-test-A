@@ -300,3 +300,49 @@ section { margin-top: 36px; }
   font-size: .85rem;
   padding: 20px 0;
 }
+
+/* ---------- Avis des lecteurs ---------- */
+
+.reviews { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border); }
+.reviews h3 { margin: 0 0 10px; }
+.reviews-summary { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.reviews-summary strong { font-size: 1.3rem; }
+
+.stars { color: #e3a008; letter-spacing: 2px; white-space: nowrap; }
+.stars-off { color: var(--border); }
+
+.review-form {
+  margin: 16px 0; padding: 16px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  max-width: 560px;
+}
+.review-form .field { margin: 10px 0; }
+.review-form input:not([type=radio]), .review-form textarea {
+  font-weight: 400; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+  resize: vertical; width: 100%;
+}
+.review-form .buy-btn { display: inline-block; border: none; cursor: pointer; padding: 9px 18px; font-size: .9rem; }
+.review-form .buy-btn:disabled { opacity: .6; cursor: wait; }
+.review-form .form-error { text-align: left; padding: 0; margin: 4px 0 10px; }
+
+/* Étoiles cliquables : les boutons radio sont dans l'ordre 5 → 1 et affichés de droite à gauche,
+   ce qui permet de colorer l'étoile survolée et toutes celles qui la précèdent. */
+.star-input {
+  border: none; padding: 0; margin: 0;
+  display: inline-flex; flex-direction: row-reverse; justify-content: flex-end;
+}
+.star-label { font-weight: 600; margin: 0 0 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.star-input input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.star-input label { font-size: 2rem; line-height: 1; color: var(--border); cursor: pointer; padding: 0 2px; transition: color .1s; }
+.star-input label:hover,
+.star-input label:hover ~ label,
+.star-input input:checked ~ label { color: #e3a008; }
+.star-input input:focus-visible + label { outline: 2px solid var(--accent); border-radius: 4px; }
+
+.review-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 14px; }
+.review-list li { padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.review-list li:last-child { border-bottom: none; }
+.review-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.review-list p { margin: 6px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
