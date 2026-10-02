@@ -6,6 +6,11 @@
 
 /* ---------- Sources de données ------------------------------------------ */
 
+// Champs demandés à Open Library ; "editions" renvoie l'édition qui correspond au
+// filtre de langue (la version française).
+const OL_FIELDS = "key,title,subtitle,author_name,first_publish_year,isbn,cover_i,subject,publisher,number_of_pages_median,language," +
+  "editions,editions.key,editions.title,editions.subtitle,editions.isbn,editions.cover_i,editions.publisher,editions.publish_date";
+
 const sources = {
   google: {
     label: "Google Books",
@@ -67,8 +72,7 @@ const sources = {
         limit: PAGE_SIZE,
         page: page + 1,
         // "editions" renvoie l'édition qui correspond au filtre de langue (la version française).
-        fields: "key,title,subtitle,author_name,first_publish_year,isbn,cover_i,subject,publisher,number_of_pages_median,language," +
-                "editions,editions.key,editions.title,editions.subtitle,editions.isbn,editions.cover_i,editions.publisher,editions.publish_date",
+        fields: OL_FIELDS,
       });
       const { type, value } = query;
       if (type === "genre") params.set("subject", value.openlibrary);
@@ -89,6 +93,90 @@ const sources = {
         .map(normalizeOpenLibrary);
       return { books, total: data.numFound || 0, hasMore: (page + 1) * PAGE_SIZE < (data.numFound || 0) };
     },
+  },
+};
+
+/* ---------- Source expérimentale : catalogue de la BnF (SRU) ---------------
+ * La BnF propose une API publique (SRU) mais ne garantit pas qu'un navigateur
+ * puisse l'interroger depuis un autre site (CORS). Le site la teste donc une
+ * fois par visite : si l'appel échoue, la source est ignorée sans bruit.
+ * ------------------------------------------------------------------------- */
+
+const BNF_SRU = "https://catalogue.bnf.fr/api/SRU";
+let bnfState = (() => { try { return sessionStorage.getItem("bibliofr.bnf") || "unknown"; } catch { return "unknown"; } })();
+
+function setBnfState(state) {
+  bnfState = state;
+  try { sessionStorage.setItem("bibliofr.bnf", state); } catch { /* ignoré */ }
+}
+
+const cqlQuote = v => `"${String(v).replace(/["\\]/g, " ").trim()}"`;
+
+function bnfQuery({ type, value }) {
+  const lang = 'bib.language any "fre" and bib.doctype any "a"';
+  const year = new Date().getFullYear();
+  switch (type) {
+    case "title": return `bib.title all ${cqlQuote(value)} and ${lang}`;
+    case "author": return `bib.author all ${cqlQuote(value)} and ${lang}`;
+    case "isbn": return `bib.isbn any ${cqlQuote(value.replace(/[^0-9Xx]/g, ""))}`;
+    case "genre": return `bib.subject all ${cqlQuote(value.name.split(/[&,]/)[0])} and ${lang}`;
+    case "recent": return `bib.date any "${year} ${year - 1}" and ${value ? `bib.subject all ${cqlQuote(value.name.split(/[&,]/)[0])} and ` : ""}${lang}`;
+    default: return `bib.anywhere all ${cqlQuote(value)} and ${lang}`;
+  }
+}
+
+// « Saint-Exupéry, Antoine de (1900-1944). Auteur du texte » → « Antoine de Saint-Exupéry »
+function bnfAuthor(raw) {
+  const clean = raw.replace(/\(.*?\)/g, "").split(".")[0].trim();
+  const [last, first] = clean.split(",").map(x => x && x.trim());
+  return first ? `${first} ${last}` : last;
+}
+
+function normalizeBnf(rec) {
+  const all = tag => [...rec.getElementsByTagName(tag)].map(n => n.textContent.trim()).filter(Boolean);
+  const title = (all("dc:title")[0] || "").split(" / ")[0].replace(/\s*:\s*/, " — ").trim();
+  const ids = all("dc:identifier");
+  const isbnMatch = ids.join(" ").replace(/-/g, "").match(/\b(97[89]\d{10}|\d{9}[\dX])\b/);
+  const isbn = isbnMatch ? isbnMatch[1] : "";
+  const ark = ids.find(i => i.includes("ark:/")) || "";
+  const year = (all("dc:date")[0] || "").match(/\d{4}/);
+  const publisher = (all("dc:publisher")[0] || "").split(":").pop().replace(/\(.*?\)/g, "").split(",")[0].trim();
+  return {
+    id: "bnf-" + (ark.split("/").pop() || Math.random().toString(36).slice(2)),
+    title,
+    authors: [...new Set(all("dc:creator").map(bnfAuthor).filter(Boolean))].slice(0, 4),
+    year: year ? year[0] : "",
+    publisher,
+    pages: "",
+    categories: all("dc:subject").slice(0, 6),
+    description: "",
+    isbn,
+    covers: coverCandidates(isbn),
+    link: ark.startsWith("http") ? ark : (ark ? `https://catalogue.bnf.fr/${ark}` : ""),
+  };
+}
+
+const bnfSource = {
+  label: "BnF",
+  async fetch(query, page) {
+    const params = new URLSearchParams({
+      version: "1.2", operation: "searchRetrieve", recordSchema: "dublincore",
+      query: bnfQuery(query), maximumRecords: 30, startRecord: page * 30 + 1,
+    });
+    let res;
+    try {
+      res = await fetch(`${BNF_SRU}?${params}`);
+    } catch (err) {
+      setBnfState("off");  // refusée par le navigateur (CORS) : on n'insiste pas
+      throw new Error("BnF : non accessible depuis ce navigateur");
+    }
+    if (!res.ok) throw new Error(`BnF : erreur ${res.status}`);
+    setBnfState("on");
+    const xml = new DOMParser().parseFromString(await res.text(), "application/xml");
+    const total = Number((xml.getElementsByTagName("srw:numberOfRecords")[0] || {}).textContent || 0);
+    const books = [...xml.getElementsByTagName("srw:record")].map(normalizeBnf)
+      .filter(b => b.title && !isLowContent(b.title, "", b.categories));
+    return { books, total, hasMore: (page + 1) * 30 < total };
   },
 };
 
@@ -187,3 +275,29 @@ function normalizeOpenLibrary(doc) {
     link: "https://openlibrary.org" + (ed.key || doc.key),
   };
 }
+
+// Retrouve un livre à partir de son identifiant (lien partagé).
+async function fetchBookById(id) {
+  if (bookCache.has(id)) return bookCache.get(id);
+  let book = null;
+  if (id.startsWith("g-")) {
+    const params = new URLSearchParams({ country: "FR" });
+    if (GOOGLE_API_KEY) params.set("key", GOOGLE_API_KEY);
+    const res = await fetch(`https://www.googleapis.com/books/v1/volumes/${encodeURIComponent(id.slice(2))}?${params}`);
+    if (res.ok) book = normalizeGoogle(await res.json());
+  } else if (id.startsWith("ol-")) {
+    const key = id.slice(3).replace(/_/g, "/");
+    const params = new URLSearchParams({ q: `key:${key}`, language: "fre", fields: OL_FIELDS, limit: 1 });
+    const res = await fetch(`https://openlibrary.org/search.json?${params}`);
+    if (res.ok) {
+      const doc = ((await res.json()).docs || [])[0];
+      if (doc) book = normalizeOpenLibrary(doc);
+    }
+  }
+  if (book) bookCache.set(id, book);
+  return book;
+}
+
+sources.bnf = bnfSource;
+// Sources utilisables en ce moment (la BnF seulement si le navigateur peut la joindre).
+const sourceUsable = name => name !== "bnf" || bnfState !== "off";

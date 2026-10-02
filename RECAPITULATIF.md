@@ -24,39 +24,56 @@ Ce document résume tout le travail réalisé sur le site **Biblio FR** : object
 
 ## 3. Structure des fichiers
 
+Depuis la feuille de route (versions 1.1 à 2.0), le JavaScript est découpé en modules dans `js/` (scripts classiques, portée globale partagée) :
+
 | Fichier | Rôle |
 |---|---|
-| `index.html` | Squelette : en-tête (recherche, menu, bouton compte), `<main id="app">`, boîtes de dialogue (fiche livre, connexion, préférences), pied de page, scripts. |
-| `style.css` | Mise en forme, thème clair/sombre automatique (`prefers-color-scheme`), responsive (mobile ≥ 375 px sans défilement horizontal). |
-| `data.js` | **Configuration et données statiques** : clés API, ID Firebase, `GENRE_GROUPS`/`GENRES` (70 genres en 6 familles), `HOME_GENRES`, `FEATURED_AUTHORS` (333 auteurs, 15 catégories), `MUST_READS` (133 incontournables en 9 catégories), `STORES` (7 librairies). |
-| `vendor/firebase-app-compat.js`, `vendor/firebase-auth-compat.js` | Firebase JS SDK **12.19.0** (builds « compat » UMD, licence Apache 2.0), récupérés depuis npm et inclus dans le dépôt. |
-| `app.js` | Cœur : préférences, sources de données (Google Books / Open Library), filtre des « non-livres », couvertures, cache, routeur, vues (accueil, genres, auteurs, résultats), fiche livre (modale). |
-| `auth.js` | Comptes (Firebase Authentication) : bouton d'en-tête, fenêtre connexion/inscription/mot de passe oublié, page « Mon compte ». |
-| `reviews.js` | Notes et commentaires : stockage local ou Firestore (API REST), section « Avis des lecteurs » de la fiche, publication, modification, suppression. |
-| `profiles.js` | Profils publics (collection `users`), recherche de lecteurs, page de profil. |
-| `rankings.js` | Classement des livres les plus commentés, Nouveautés (sorties récentes), Incontournables. |
-| `firestore.rules` | Règles de sécurité Firestore (à copier dans la console Firebase). |
-| `README.md` | Documentation utilisateur et procédures de configuration. |
+| `index.html` | Squelette : en-tête (logo, recherche, ⚙️ + compte, menu défilant), `<main id="app">`, dialogues (fiche livre, connexion, préférences), métadonnées SEO/Open Graph, scripts. |
+| `style.css` | Mise en forme, thème clair/sombre, responsive (≥ 375 px sans défilement horizontal), focus visibles, réduction des animations. |
+| `data.js` | Configuration (`GOOGLE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_API_KEY`) et données : `GENRE_GROUPS`/`GENRES` (70), `HOME_GENRES`, `FEATURED_AUTHORS` (333), `MUST_READS` (133), `STORES` (7). |
+| `js/core/util.js` | `PAGE_SIZE`, `app`, `bookCache`, `prefs`, `getSource`, `getStore`, `esc`, `enc`, `authorLink`, `storeUrl`, `loadingHtml`, `setPageMeta`, `DEFAULT_DESCRIPTION`. |
+| `js/services/cache.js` | Cache persistant `localStorage` à durée de vie par type (`CACHE_TTL`), `dedupedFetch` (requêtes identiques mutualisées), `limited` (4 requêtes max en parallèle). |
+| `js/services/sources.js` | `sources.google`, `sources.openlibrary`, `sources.bnf` (expérimental, auto-détecté), normalisation, `isLowContent`, `coverCandidates`, `fetchBookById` (liens partagés). |
+| `js/services/quality.js` | `norm`, `levenshtein`, `tokenMatch`, `workKey`/`dedupeWorks`/`mergeBooks` (œuvre vs édition), `isGenreFalsePositive`, `relevance`/`rankByRelevance`, `suggest` (autocomplétion), `didYouMean`, `authorVariant`. |
+| `js/services/search.js` | `fetchFrom` (mémoire → cache → réseau), `fetchSources` (bascule / toutes les sources), `searchBooks` (pipeline complet). |
+| `js/services/firestore.js` | Objet `firestore` : `request`, `get`, `list`, `patch`, `remove`, `runQuery`, `commit`, `docName` ; conversion `toFirestore`/`fromFirestore`, `ts()`. |
+| `js/ui/components.js` | Couvertures (adresses en échec mémorisées), cartes livre (pastilles bibliothèque), squelettes de chargement. |
+| `js/ui/autocomplete.js` | Liste de suggestions accessible (combobox, flèches, Entrée, Échap). |
+| `js/ui/book.js` | Fiche livre en modale, `currentBook`, partage (`shareBook`, `#/livre/<id>`). |
+| `js/views/catalog.js` | Accueil, genres, auteurs, résultats (filtres combinables, aucun résultat → suggestions). |
+| `js/views/discover.js` | Classement, Nouveautés, Incontournables. |
+| `js/views/about.js` | Page « À propos » (sources, avis, données personnelles, accessibilité). |
+| `js/features/auth.js` | Firebase Auth, fenêtre connexion/inscription, page « Mon compte ». |
+| `js/features/reviews.js` | Avis : lecture, création (`commit`, date serveur), modification, suppression, signalement, e-mail vérifié. |
+| `js/features/profiles.js` | Profils publics, pseudos uniques, avatars, recherche de lecteurs, page de profil. |
+| `js/features/library.js` | Bibliothèque personnelle, listes, historique, statistiques, listes publiques. |
+| `js/features/moderation.js` | Signalements, rôle modérateur, page de modération. |
+| `js/features/social.js` | Abonnements, fil d'actualité, pastille de nouveautés. |
+| `js/router.js` | Routeur (`route()` au `DOMContentLoaded`), menu courant, lien d'évitement, recherche d'en-tête, préférences. |
+| `firestore.rules` | Règles Firestore complètes (à copier dans la console). |
+| `icon.svg`, `*.png`, `manifest.webmanifest`, `robots.txt`, `sitemap.xml` | Identité visuelle, aperçu de partage, référencement. |
 
-**Ordre de chargement** : `data.js` → `vendor/firebase-app-compat.js` → `vendor/firebase-auth-compat.js` → `app.js` → `auth.js` → `reviews.js` → `profiles.js` → `rankings.js`.
-Le premier affichage (`route()`) est déclenché sur `DOMContentLoaded`, une fois tous les scripts chargés.
+L'ordre des `<script>` dans `index.html` est significatif (chaque fichier utilise les précédents).
 
 ## 4. Routes (routage par hash)
 
-| URL | Vue | Fichier |
-|---|---|---|
-| `#/` | Accueil : genres, auteurs, incontournables, étagères « Sorties récentes », « Mangas », « Romans » | `app.js` |
-| `#/genres` | 70 genres groupés par famille | `app.js` |
-| `#/genre/<id>` | Livres d'un genre | `app.js` |
-| `#/auteurs` | Auteurs mis en avant + filtre par catégorie + recherche libre | `app.js` |
-| `#/auteur/<nom>` | Livres d'un auteur | `app.js` |
-| `#/recherche/<mode>/<texte>` | Résultats ; `mode` = `all`, `title`, `author`, `isbn` | `app.js` |
-| `#/classement` | Livres les plus commentés (semaine / mois / depuis toujours) | `rankings.js` |
-| `#/nouveautes[/<genreId>]` | Sorties récentes (année en cours et précédente) | `rankings.js` |
-| `#/incontournables[/<slug-catégorie>]` | 133 livres de référence | `rankings.js` |
-| `#/lecteurs[/<texte>]` | Recherche de lecteurs par début de pseudo / derniers inscrits | `profiles.js` |
-| `#/lecteur/<uid>` | Profil public d'un lecteur | `profiles.js` |
-| `#/compte` | Mon compte | `auth.js` |
+| URL | Vue |
+|---|---|
+| `#/` | Accueil |
+| `#/genres`, `#/genre/<id>` | Genres, livres d'un genre |
+| `#/auteurs`, `#/auteur/<nom>` | Auteurs, livres d'un auteur |
+| `#/recherche/<all|title|author|isbn>/<texte>` | Résultats |
+| `#/livre/<id>` | Lien partagé : la fiche s'ouvre sur l'accueil (`g-…` Google, `ol-…` Open Library) |
+| `#/classement` | Livres les plus commentés |
+| `#/nouveautes[/<genreId>]` | Sorties récentes |
+| `#/incontournables[/<slug>]` | 133 livres de référence |
+| `#/bibliotheque[/<en-cours|a-lire|lus|favoris|listes|historique>]` | Ma bibliothèque |
+| `#/liste/<uid>/<listId>` | Liste publique partagée |
+| `#/lecteurs[/<texte>]`, `#/lecteur/<uid>` | Recherche de lecteurs, profil public |
+| `#/fil` | Fil d'actualité (lecteurs suivis) |
+| `#/compte` | Mon compte |
+| `#/moderation` | Modération (administrateurs) |
+| `#/a-propos` | À propos |
 
 ## 5. Sources de données des livres
 
@@ -73,11 +90,14 @@ Le premier affichage (`route()`) est déclenché sur `DOMContentLoaded`, une foi
 - `https://openlibrary.org/search.json` avec `language=fre` et le paramètre `fields`, qui inclut **`editions`** pour obtenir l'**édition française** (titre, ISBN, couverture, éditeur, date) plutôt que l'œuvre originale.
 - Paramètres utilisés : `subject`, `author`, `title`, `isbn`, `q` ; `sort=new` pour les nouveautés.
 
-### 5.3 Combinaison des sources (`searchBooks` dans `app.js`)
+### 5.3 Combinaison des sources et qualité (`js/services/search.js`, `quality.js`)
 - Préférence utilisateur (⚙️) : **« Toutes les sources »** (défaut), « Google Books uniquement », « Open Library uniquement ».
 - Mode « toutes » : les deux sources sont interrogées en parallèle, puis leurs résultats sont **entremêlés et dédoublonnés** (par ISBN, sinon titre + auteur).
 - Une source qui échoue est mise de côté **5 minutes** (`SOURCE_COOLDOWN_MS`) et l'autre prend le relais. Les raisons d'échec s'affichent sous le titre des résultats.
-- Les résultats sont gardés en mémoire (`resultCache`) et les livres sont indexés dans `bookCache` (id → livre) pour la fiche.
+- Pipeline : sources → (variante « nom de famille » pour les auteurs peu fournis) → exclusion des faux positifs de genre → **regroupement des éditions** par `workKey` (titre sans mentions d'édition + n° de tome + nom de l'auteur) avec fusion des fiches → **classement par pertinence** (`relevance`).
+- Open Library : seules les œuvres avec une édition française ou la langue `fre` sont gardées.
+- **BnF (expérimental)** : API SRU (`catalogue.bnf.fr/api/SRU`, Dublin Core). Testée une fois par visite ; si le navigateur refuse l'appel (CORS), elle est ignorée silencieusement (`bnfState` en `sessionStorage`). Non vérifiable depuis l'environnement de développement.
+- **Cache** (`cache.js`) : mémoire de la page, puis `localStorage` (ISBN 7 j, genres/auteurs 24 h, recherches 12 h, nouveautés 6 h, 60 entrées max), puis réseau mutualisé et limité à 4 requêtes simultanées. Bouton « Vider le cache » dans ⚙️. Les incontournables ont leur propre cache de 7 jours.
 - Format normalisé d'un livre : `{ id, title, authors[], year, publisher, pages, categories[], description, isbn, covers[], link }`.
 
 ### 5.4 Filtre des « non-livres »
@@ -127,15 +147,21 @@ Ils portent tous les deux le nom affiché « test biblio » :
 - Champs : `uid`, `bookKey`, `title`, `rating` (entier 1–5), `name` (pseudo affiché, ≤ 50), `comment` (≤ 2000), `createdAt` (timestamp), `updatedAt` (timestamp, optionnel, ajouté à la modification).
 - `bookKey` = `reviewKey(book)` = « titre principal normalisé | nom de famille du premier auteur » (sans accents ni ponctuation, en minuscules). Exemple : `le petit prince|exupery`. Toutes les éditions d'un même livre partagent donc leurs avis.
 
-#### Collection `users` (profils publics)
-- ID = `uid`. Champs : `name` (1–30), `nameLower` (= `name.toLowerCase()`, pour la recherche par préfixe), `createdAt` (date de création du compte Firebase), `photoURL` (≤ 500, photo Google éventuelle).
-- **Jamais d'e-mail.** Le profil est créé ou mis à jour à chaque connexion (`syncProfile`, PATCH avec `updateMask`).
-- Recherche : `nameLower >= q` et `< q + ""`, triée par `nameLower`. Derniers inscrits : tri par `createdAt` décroissant.
+#### Collection `users` (profils publics) et sous-collections
+- `users/{uid}` : `name` (2–30, **unique**), `nameLower`, `createdAt`, `photoURL`, `avatar` (emoji, facultatif), `showLibrary` (booléen). Jamais d'e-mail. Créé/mis à jour à la connexion (`syncProfile`).
+- `users/{uid}/library/{bookKey}` : `title`, `authors`, `cover`, `isbn`, `year`, `pages`, `status` (`''|to-read|reading|read`), `favorite`, `addedAt`, `updatedAt`, `readAt`. Lisible par tous seulement si `showLibrary`.
+- `users/{uid}/lists/{listId}` : `name`, `public`, `items` (≤ 200 résumés de livres), `createdAt`, `updatedAt`. Lisible par tous si `public`.
+- `users/{uid}/following/{autre}` et `users/{autre}/followers/{uid}` : `createdAt` (serveur), écrits ensemble.
 
-#### Règles de sécurité (`firestore.rules`, publiées dans la console)
-- `reviews` : lecture publique. Création par un compte connecté uniquement, avec ID = `uid__bookKey`, champs autorisés limités, types et longueurs contrôlés, `uid` = compte connecté. **Modification par l'auteur** limitée à `name`, `rating`, `comment` et `updatedAt`, avec les mêmes contrôles. **Suppression par l'auteur** uniquement.
-- `users` : lecture publique ; création, modification et suppression **uniquement de son propre profil** ; champs limités (`name`, `nameLower`, `createdAt`, `photoURL`) ; `nameLower == name.lower()`.
-- Toute modification de `firestore.rules` dans le dépôt doit être **recopiée à la main** par le propriétaire dans Firebase → Firestore → Règles → Publier.
+#### Autres collections
+- `usernames/{pseudo en minuscules}` : `{ uid }`, réservation atomique du pseudo (commit avec `users/{uid}`).
+- `reports/{uidSignaleur__idAvis}` : `reviewId`, `reviewUid`, `bookKey`, `title`, `reason`, `reporterUid`, `createdAt` (serveur). Lisibles par les modérateurs.
+- `admins/{uid}` : **créé à la main** dans la console pour désigner un modérateur.
+- `reviews/{uid__bookKey}` : champs déjà décrits + `hidden` (masqué par un modérateur). `createdAt` et `updatedAt` sont fixés par le **serveur** (`REQUEST_TIME` via `:commit`).
+
+#### Règles de sécurité (`firestore.rules`)
+Fonctions `signedIn`, `isUser`, `isAdmin` (existence de `admins/{uid}`), `verified` (`email_verified`). Avis : création par un compte vérifié, `createdAt == request.time` ; modification par l'auteur (note, commentaire, pseudo, `updatedAt == request.time`) ou par un modérateur (`hidden` seulement) ; suppression par l'auteur ou un modérateur. Pseudos : réservation liée au profil via `getAfter`. Bibliothèque, listes, abonnements : écriture par le propriétaire uniquement, champs et tailles contrôlés.
+**Les règles de la v1.2–2.0 doivent être publiées par le propriétaire et vérifiées** (voir section 9).
 
 #### Vérifications effectuées sur les vrais services (avec des comptes de test supprimés ensuite)
 - Création de compte, connexion, renouvellement de session, connexion Google disponible, domaines autorisés.
@@ -146,43 +172,37 @@ Ils portent tous les deux le nom affiché « test biblio » :
 
 ## 7. Fonctionnalités en détail
 
-- **Catalogue** : recherche (tout / titre / auteur / ISBN), tri par pertinence ou par date, « Charger plus », fiche livre en modale (couverture, auteurs cliquables, éditeur, date, pages, ISBN, catégories, résumé, liens d'achat, avis).
-- **Genres** : 70 genres en 6 familles (Littérature, Imaginaire, Mangas & BD, Jeunesse, Savoirs & essais, Vie pratique). Chaque genre a une requête `google` (pour `subject:`) et une requête `openlibrary` (paramètre `subject`).
-- **Auteurs** : 333 auteurs en 15 catégories, filtrables, plus une recherche libre.
-- **Incontournables** : 133 titres en 9 catégories. La fiche réelle est retrouvée automatiquement (recherche titre + auteur, correspondance par `reviewKey` ou par préfixe du titre + nom de l'auteur), puis gardée **7 jours** dans le `localStorage` (`bibliofr.mustReads`) pour économiser le quota Google.
-- **Nouveautés** : parutions de l'année en cours et de la précédente (filtre côté client, années futures aberrantes exclues), badge « Nouveau » pour l'année en cours, filtres par genre, étagère sur l'accueil.
-- **Classement** : agrégation côté client des avis Firestore par `bookKey`, tri par nombre d'avis puis par note moyenne. Périodes : 7 jours, 30 jours, depuis toujours. Couverture et auteur retrouvés pour les 10 premiers.
-- **Avis** : note 1–5 étoiles (boutons radio stylés), commentaire facultatif, moyenne et nombre d'avis, badge « Vous », « modifié le … », modification en place (`openReviewEditor`), suppression avec confirmation. Il faut être connecté pour publier si Firebase est configuré ; sinon, les avis sont stockés localement dans le navigateur (mode de repli).
-- **Lecteurs** : recherche au fil de la frappe, cartes de lecteurs, page de profil (statistiques, répartition des notes en barres, liste des avis). Les pseudos sont cliquables dans les avis.
-- **Préférences** (⚙️, `localStorage`) : source du catalogue, librairie préférée.
+- **Recherche (v1.1)** : sans accents, fautes de frappe tolérées, autocomplétion locale (auteurs, incontournables, genres ; aucune requête réseau), filtres combinables Année / Auteur / Genre sur les résultats chargés, « Vouliez-vous dire » + pistes si aucun résultat, cartes grisées pendant le chargement.
+- **Bibliothèque (v1.2)** : statuts À lire / En cours / Lu, Favoris, listes (créer, renommer, supprimer, publique + lien), historique local (60 derniers), statistiques (lus, lus dans l'année, pages, avis, note moyenne). Sans compte : navigateur ; avec compte : Firestore, avec transfert à la connexion. Option d'affichage sur le profil public.
+- **Communauté (v1.3)** : avis réservés aux e-mails vérifiés ; signalement (5 motifs) ; modération (masquer, réafficher, supprimer, classer) ; pseudos uniques ; avatar emoji ; identifiant de compte visible dans « Mon compte ».
+- **Performance (v1.4)** : cache persistant, requêtes mutualisées, parallélisme limité ; mesuré : une page revisitée ne déclenche aucune requête.
+- **Finitions (v2.0)** : source BnF expérimentale ; suivre un lecteur, fil d'actualité, pastille de nouveautés ; partage d'une fiche ou d'une liste ; nouvel en-tête ; icône SVG/PNG, manifeste, Open Graph, JSON-LD, robots.txt, sitemap.xml ; page « À propos » ; lien d'évitement, focus visibles, menu courant signalé.
+- Fonctions antérieures : catalogue par genre/auteur, incontournables, nouveautés, classement des plus commentés, fiche livre, liens d'achat, avis modifiables, profils publics.
 
 ## 8. Historique des étapes (commits)
 
-1. Création du site (catalogue, genres, auteurs, liens d'achat).
-2. `.nojekyll` pour déclencher la première publication GitHub Pages.
-3. Bascule automatique sur Open Library quand Google Books est saturé.
-4. Sources de couvertures multiples, plus de genres et d'auteurs, mode « toutes les sources ».
-5. Liens d'achat par titre + auteur ; éditions françaises (Open Library) ; prise en charge d'une clé Google.
-6. Activation de la clé Google Books (+ `country=FR`, seconde tentative en recherche simple).
-7. Notes et commentaires (local, puis Firestore).
-8. Activation de Firestore (projet `test-biblio-998a1`).
-9. Comptes utilisateurs (Firebase Auth, SDK inclus dans `vendor/`).
-10. Clé API dédiée au projet Firebase.
-11. Classement des lecteurs et sorties récentes.
-12. Filtre des agendas et coloriages ; 333 auteurs, 70 genres, page Incontournables.
-13. Recherche de lecteurs et profils publics.
-14. Modification de sa note et de son commentaire.
+Versions initiales : création du site ; GitHub Pages ; bascule entre sources ; couvertures ; éditions françaises ; clé Google ; avis ; Firestore ; comptes ; clé Firebase dédiée ; classement et nouveautés ; filtre des agendas, 333 auteurs, 70 genres, incontournables ; profils publics ; modification des avis ; récapitulatif.
 
-Une demande d'onglet « Tendances / plus vendus » a été **abandonnée** à la demande du propriétaire, au profit du classement basé sur les avis du site et de l'onglet Nouveautés. Il n'existe pas de source gratuite des vrais chiffres de vente en France.
+Feuille de route (document « Feuille de route Biblio FR ») :
+1. Découpage du JavaScript en modules (préparation, sans changement de comportement).
+2. **v1.1** Recherche, pertinence, dédoublonnage, qualité des genres.
+3. **v1.2** Bibliothèque personnelle.
+4. **v1.3** Modération, e-mail vérifié, pseudos uniques, date serveur, avatars.
+5. **v1.4** Cache renforcé, mutualisation et limitation des requêtes.
+6. **v2.0** Source BnF expérimentale, fonctions sociales, finitions (en-tête, SEO, icône, partage, à propos, accessibilité).
+
+Une demande d'onglet « Tendances / plus vendus » a été abandonnée au profit du classement par avis et des Nouveautés.
 
 ## 9. Limites connues et points d'attention
 
-- **Qualité des sources** : Google Books classe parfois mal les genres (il renvoie des livres *sur* un sujet plutôt que *du* genre) ; Open Library couvre moins bien les titres français récents. Les genres très précis (shōnen, shōjo, seinen…) peuvent donner peu de résultats.
-- **Quota Google Books** : environ 1000 requêtes par jour par défaut sur la clé. Le mode « toutes les sources », les étagères de l'accueil et les Incontournables consomment des requêtes (atténué par les caches).
-- **Couvertures Amazon** : leur affichage depuis un autre site n'est pas garanti ; la couverture générée prend le relais.
-- **Avis** : n'importe quel compte peut publier, l'e-mail n'a pas besoin d'être vérifié et il n'y a pas de modération intégrée. La modération se fait à la main dans la console Firebase (Firestore → `reviews` → supprimer le document). Le `createdAt` est fixé par le client (il n'est pas forcé à l'heure du serveur).
-- **Nom du pseudo** : il n'y a pas d'unicité des pseudos ; deux lecteurs peuvent porter le même.
-- **Environnement de développement utilisé** : le réseau y bloquait Open Library, les sites des libraires et GitHub Pages. Les interfaces ont été testées avec Playwright et des réponses d'API simulées ; les règles Firebase et l'authentification ont été vérifiées sur les vrais services par des appels REST.
+- **À faire par le propriétaire** : publier la dernière version de `firestore.rules` dans la console, puis faire vérifier les règles (comptes de test temporaires) ; créer `admins/{uid}` pour chaque modérateur.
+- **E-mail vérifié** : la création d'un avis par un compte vérifié n'a pas pu être testée automatiquement (un compte de test créé par API n'est pas vérifié) ; le refus pour un compte non vérifié, lui, est testable.
+- **BnF** : non testée en conditions réelles (réseau bloqué en développement) ; ignorée si l'API refuse les appels du navigateur.
+- **Indexation** : les pages sont des routes `#/…` ; les moteurs n'indexent que l'accueil. Un passage à des URL réelles nécessiterait un rendu côté serveur ou des pages statiques générées.
+- **Nom de domaine** : non configuré (procédure dans le README).
+- Qualité variable des sources (genres approximatifs chez Google, couverture inégale des nouveautés françaises) ; quota Google Books d'environ 1000 requêtes/jour (atténué par le cache).
+- Avis masqués : filtrés côté site (les règles n'empêchent pas leur lecture par l'API).
+- Pas de notifications push : la pastille du fil est calculée à la connexion et à chaque visite du fil.
 
 ## 10. Méthode de travail suivie (à conserver)
 
@@ -193,8 +213,8 @@ Une demande d'onglet « Tendances / plus vendus » a été **abandonnée** à la
 
 ## 11. Pistes d'évolution possibles
 
-- Modération des avis (signalement, rôle administrateur), exigence d'un e-mail vérifié pour publier.
-- Pseudos uniques, abonnements entre lecteurs (« suivre »), listes de lecture (« à lire », « lu »).
-- `createdAt` imposé par le serveur (transformation `REQUEST_TIME` via un commit Firestore).
-- Source de données supplémentaire pour les nouveautés françaises (par exemple la BnF), si une API compatible avec le navigateur est disponible.
-- Nom de domaine personnalisé pour GitHub Pages (à ajouter ensuite aux restrictions des clés et aux domaines autorisés Firebase).
+- URL réelles (sans `#`) avec pages statiques générées pour l'indexation des fiches livres.
+- Notifications (e-mail ou push) pour les nouveaux abonnés et les avis des lecteurs suivis.
+- Proxy serveur (Cloud Functions) pour fiabiliser la BnF et d'autres sources françaises (Electre, Dilicom… si accès).
+- Statistiques de lecture avancées (genres préférés, objectifs annuels).
+- Modération assistée (filtre automatique des insultes, limitation du nombre d'avis par jour).

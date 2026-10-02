@@ -8,6 +8,13 @@ function route() {
   const [, section = "", ...rest] = location.hash.replace(/^#/, "").split("/");
   const arg = rest.map(decodeURIComponent).join("/");
   window.scrollTo(0, 0);
+  // Entrée du menu correspondant à la page affichée.
+  document.querySelectorAll(".main-nav a").forEach(a => {
+    const target = a.getAttribute("href").split("/")[1];
+    if (target === section || (section === "genre" && target === "genres") || (section === "lecteur" && target === "lecteurs")) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  });
+  setPageMeta(DEFAULT_DESCRIPTION);
 
   if (bookDialog.open) bookDialog.close();
 
@@ -36,6 +43,12 @@ function route() {
       return viewPublicList(arg);
     case "moderation":
       return viewModeration();
+    case "a-propos":
+      return viewAbout();
+    case "fil":
+      return viewFeed();
+    case "livre":
+      return viewSharedBook(arg);
     case "genre": {
       const genre = GENRES.find(g => g.id === arg);
       if (!genre) return viewNotFound();
@@ -112,6 +125,12 @@ document.getElementById("clear-cache").addEventListener("click", e => {
 });
 
 attachAutocomplete(document.getElementById("search-input"));
+
+// Lien d'évitement : place le focus sur le contenu principal sans changer de page.
+document.querySelector("[data-skip]").addEventListener("click", e => {
+  e.preventDefault();
+  app.focus();
+});
 
 window.addEventListener("hashchange", route);
 // Premier affichage une fois tous les scripts chargés (auth.js fournit la page « Mon compte »).

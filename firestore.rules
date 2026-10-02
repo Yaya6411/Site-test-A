@@ -102,6 +102,25 @@ service cloud.firestore {
         allow delete: if isUser(userId);
       }
 
+      // Abonnements : « je suis ce lecteur » (following) et son reflet chez
+      // le lecteur suivi (followers), créés et supprimés ensemble.
+      match /following/{targetId} {
+        allow read: if true;
+        allow create: if isUser(userId) && targetId != userId
+          && request.resource.data.keys().hasOnly(['createdAt'])
+          && request.resource.data.createdAt == request.time
+          && existsAfter(/databases/$(database)/documents/users/$(targetId)/followers/$(userId));
+        allow delete: if isUser(userId);
+      }
+      match /followers/{followerId} {
+        allow read: if true;
+        allow create: if isUser(followerId) && followerId != userId
+          && request.resource.data.keys().hasOnly(['createdAt'])
+          && request.resource.data.createdAt == request.time
+          && existsAfter(/databases/$(database)/documents/users/$(followerId)/following/$(userId));
+        allow delete: if isUser(followerId) || isUser(userId);
+      }
+
       // Listes personnelles : privées, sauf celles marquées publiques (partageables).
       match /lists/{listId} {
         allow read: if isUser(userId) || resource.data.public == true;

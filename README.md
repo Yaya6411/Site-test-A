@@ -11,11 +11,18 @@ romans, mangas, bandes dessinées, essais, jeunesse, etc.
 - **Incontournables** : 133 livres de référence en 9 catégories (classiques, mangas, BD, essais…).
 - **Classement** des livres les plus commentés et **Nouveautés** (parutions récentes).
 - **Filtre** des agendas, calendriers, coloriages, carnets vierges et livres de grilles.
-- **Recherche** globale, par titre, par auteur ou par ISBN.
+- **Recherche** globale, par titre, par auteur ou par ISBN : sans accents, tolérante aux fautes de frappe,
+  autocomplétion, filtres combinables (année, auteur, genre), « Vouliez-vous dire » quand rien n'est trouvé.
+- **Qualité du catalogue** : éditions d'une même œuvre regroupées, score de pertinence local, fiches de lecture
+  et ouvrages de critique écartés des genres de fiction, langue française contrôlée.
+- **Bibliothèque personnelle** : À lire, En cours, Lu, Favoris, listes (partageables), historique, statistiques.
+- **Communauté** : avis (e-mail vérifié), signalement et modération, pseudos uniques, avatars, profils publics,
+  abonnements entre lecteurs et fil d'actualité.
 - **Fiche détaillée** de chaque livre (couverture, éditeur, date, ISBN, résumé).
-- **Lien d'achat** pour chaque livre (par ISBN quand il est connu) vers Leslibraires.fr, Fnac, Amazon.fr,
+- **Lien d'achat** pour chaque livre (recherche titre + auteur) vers Leslibraires.fr, Fnac, Amazon.fr,
   Decitre, Cultura, Place des Libraires ou Rakuten. La librairie par défaut se règle dans les préférences ⚙️.
-- Tri par pertinence ou par date, pagination « Charger plus », thème clair/sombre automatique, responsive.
+- **Partage** d'une fiche livre ou d'une liste par lien, page « À propos », icône, aperçu pour les réseaux sociaux.
+- Tri par pertinence ou par date, « Charger plus », thème clair/sombre automatique, responsive, accessible au clavier.
 
 ## Données
 
@@ -24,7 +31,11 @@ Aucun catalogue n'est stocké dans le dépôt : le site interroge en direct
 [Open Library](https://openlibrary.org/developers/api) (filtre `language=fre`), ce qui donne accès à des
 centaines de milliers d'ouvrages en français sans maintenance. Par défaut les deux sources sont interrogées
 en parallèle et leurs résultats fusionnés (sans doublons) ; si l'une est indisponible, l'autre prend le relais.
-Le choix se fait dans les préférences.
+Le choix se fait dans les préférences. Le catalogue de la **BnF** (API SRU) est utilisé à titre expérimental
+quand le navigateur peut l'interroger directement ; sinon il est ignoré.
+
+Les résultats sont gardés en cache dans le navigateur (6 h à 7 jours selon le type), les requêtes identiques
+sont mutualisées et au plus 4 requêtes partent en même temps.
 
 ## Lancer le site
 
@@ -39,12 +50,23 @@ Le site peut être publié tel quel sur GitHub Pages, Netlify, Vercel…
 
 ## Structure
 
-| Fichier      | Rôle                                                   |
-|--------------|--------------------------------------------------------|
-| `index.html` | Squelette de la page                                   |
-| `style.css`  | Mise en forme                                          |
-| `data.js`    | Genres, auteurs mis en avant et librairies en ligne    |
-| `app.js`     | Routage, appels aux API, affichage                     |
+| Fichier | Rôle |
+|---|---|
+| `index.html` | Squelette de la page, métadonnées, ordre de chargement des scripts |
+| `style.css` | Mise en forme (clair/sombre, mobile) |
+| `data.js` | Configuration (clés, projet Firebase) et données : genres, auteurs, incontournables, librairies |
+| `js/core/util.js` | État global, préférences, échappement (`esc`, `enc`), liens d'achat |
+| `js/services/cache.js` | Cache persistant, mutualisation et limitation des requêtes |
+| `js/services/sources.js` | Google Books, Open Library, BnF (expérimental), normalisation, couvertures |
+| `js/services/quality.js` | Normalisation, fautes de frappe, regroupement des éditions, pertinence, suggestions |
+| `js/services/search.js` | Recherche : sources → regroupement → filtrage → classement |
+| `js/services/firestore.js` | Accès à Firestore (API REST) |
+| `js/ui/*.js` | Composants : cartes, couvertures, autocomplétion, fiche livre (partage) |
+| `js/views/*.js` | Pages : catalogue, classement / nouveautés / incontournables, à propos |
+| `js/features/*.js` | Comptes, avis, profils, bibliothèque, modération, abonnements |
+| `js/router.js` | Navigation par hash et événements globaux |
+| `firestore.rules` | Règles de sécurité Firestore (à publier dans la console Firebase) |
+| `vendor/` | Firebase JS SDK 12.19.0 (compat, licence Apache 2.0) |
 
 ## Clé API Google Books (recommandée)
 
@@ -106,3 +128,19 @@ et liste des derniers inscrits. Chaque lecteur a une page de profil (`#/lecteur/
 d'inscription, nombre de livres notés et de commentaires, note moyenne, répartition des notes et liste
 de ses avis. Les pseudos sont cliquables dans les avis. Le profil public (collection `users`) ne contient
 jamais l'adresse e-mail ; il est créé à la connexion et mis à jour quand le pseudo change.
+
+## Modération
+
+Les modérateurs sont désignés à la main : dans Firebase → **Firestore Database**, créer une collection
+`admins` puis un document dont l'**ID** est l'identifiant du compte (affiché dans « Mon compte »), avec
+n'importe quel champ (par exemple `role = "admin"`). Le lien **Modération** apparaît alors dans le menu.
+
+## Nom de domaine personnalisé (facultatif)
+
+1. Acheter un domaine (par exemple `bibliofr.fr`) chez un registraire.
+2. GitHub → **Settings → Pages → Custom domain** : saisir le domaine, puis suivre les indications DNS de GitHub
+   (enregistrement `CNAME` vers `yaya6411.github.io`).
+3. Ajouter le domaine aux **restrictions des deux clés API** (`https://bibliofr.fr/*`) et aux **domaines
+   autorisés** de Firebase Authentication.
+4. Remplacer `https://yaya6411.github.io/Site-test-A/` dans `index.html` (balises `canonical` et `og:`),
+   `robots.txt` et `sitemap.xml`.

@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://yaya6411.github.io/Site-test-A/sitemap.xml

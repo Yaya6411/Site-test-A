@@ -37,17 +37,17 @@ function viewHome() {
 
     <section>
       <div class="section-head"><h2>🆕 Sorties récentes</h2><a href="#/nouveautes">Toutes les nouveautés →</a></div>
-      <div class="shelf" id="shelf-recent">${loadingHtml}</div>
+      <div class="shelf" id="shelf-recent">${shelfSkeleton()}</div>
     </section>
 
     <section>
       <div class="section-head"><h2>🎌 Mangas</h2><a href="#/genre/manga">Voir plus →</a></div>
-      <div class="shelf" id="shelf-manga">${loadingHtml}</div>
+      <div class="shelf" id="shelf-manga">${shelfSkeleton()}</div>
     </section>
 
     <section>
       <div class="section-head"><h2>📖 Romans</h2><a href="#/genre/romans">Voir plus →</a></div>
-      <div class="shelf" id="shelf-romans">${loadingHtml}</div>
+      <div class="shelf" id="shelf-romans">${shelfSkeleton()}</div>
     </section>`;
 
   fillRecentShelf("shelf-recent");

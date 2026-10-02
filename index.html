@@ -5,12 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Biblio FR — le catalogue des livres en français</title>
   <meta name="description" content="Parcourez les livres disponibles en français : romans, mangas, BD, essais… par genre ou par auteur, avec un lien d'achat pour chaque ouvrage.">
+  <meta name="theme-color" content="#b5452b">
+  <link rel="canonical" href="https://yaya6411.github.io/Site-test-A/">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <!-- Aperçu lors du partage d'un lien (réseaux sociaux, messageries) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Biblio FR">
+  <meta property="og:title" content="Biblio FR — le catalogue des livres en français">
+  <meta property="og:description" content="Romans, mangas, BD, essais… Trouvez un livre en français, notez-le, gérez votre bibliothèque et achetez-le chez votre libraire préféré.">
+  <meta property="og:url" content="https://yaya6411.github.io/Site-test-A/">
+  <meta property="og:image" content="https://yaya6411.github.io/Site-test-A/og-image.png">
+  <meta property="og:locale" content="fr_FR">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebSite","name":"Biblio FR","url":"https://yaya6411.github.io/Site-test-A/","inLanguage":"fr","description":"Catalogue des livres disponibles en français, avec avis de lecteurs et liens vers les librairies en ligne."}
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <a class="skip-link" href="#/" data-skip>Aller au contenu</a>
   <header class="site-header">
-    <div class="wrap header-inner">
-      <a href="#/" class="logo">📚 Biblio<span>FR</span></a>
+    <div class="wrap hdr">
+      <a href="#/" class="logo" aria-label="Biblio FR, accueil"><img src="icon.svg" alt="" width="28" height="28"><span>Biblio<span>FR</span></span></a>
       <form id="search-form" class="search" role="search">
         <select id="search-mode" aria-label="Type de recherche">
           <option value="all">Tout</option>
@@ -21,7 +39,11 @@
         <input id="search-input" type="search" placeholder="Rechercher un livre, un manga, un auteur…" autocomplete="off" required>
         <button type="submit">Rechercher</button>
       </form>
-      <nav class="main-nav">
+      <div class="header-actions">
+        <button id="settings-btn" class="icon-btn" title="Préférences" aria-label="Préférences">⚙️</button>
+        <span id="account-area"></span>
+      </div>
+      <nav class="main-nav" aria-label="Navigation principale">
         <a href="#/genres">Genres</a>
         <a href="#/auteurs">Auteurs</a>
         <a href="#/classement">Classement</a>
@@ -29,25 +51,24 @@
         <a href="#/incontournables">Incontournables</a>
         <a href="#/lecteurs">Lecteurs</a>
         <a href="#/bibliotheque">Ma bibliothèque</a>
-        <button id="settings-btn" class="icon-btn" title="Préférences" aria-label="Préférences">⚙️</button>
-        <span id="account-area"></span>
+        <a href="#/fil" id="feed-link" hidden>Fil d'actualité <span class="nav-badge" hidden></span></a>
       </nav>
     </div>
   </header>
 
-  <main id="app" class="wrap"></main>
+  <main id="app" class="wrap" tabindex="-1"></main>
 
-  <dialog id="book-dialog" class="dialog">
+  <dialog id="book-dialog" class="dialog" aria-label="Fiche du livre">
     <button class="dialog-close" data-close aria-label="Fermer">✕</button>
     <div id="book-detail"></div>
   </dialog>
 
-  <dialog id="auth-dialog" class="dialog small">
+  <dialog id="auth-dialog" class="dialog small" aria-label="Connexion">
     <button class="dialog-close" data-close aria-label="Fermer">✕</button>
     <div id="auth-content"></div>
   </dialog>
 
-  <dialog id="settings-dialog" class="dialog small">
+  <dialog id="settings-dialog" class="dialog small" aria-label="Préférences">
     <button class="dialog-close" data-close aria-label="Fermer">✕</button>
     <h2>Préférences</h2>
     <label class="field">
@@ -56,6 +77,7 @@
         <option value="all">Toutes les sources (recommandé)</option>
         <option value="google">Google Books uniquement</option>
         <option value="openlibrary">Open Library uniquement</option>
+        <option value="bnf">BnF uniquement (expérimental)</option>
       </select>
     </label>
     <label class="field">
@@ -71,6 +93,7 @@
     <div class="wrap">
       <p>Catalogue alimenté en direct par <a href="https://books.google.fr" target="_blank" rel="noopener">Google Books</a> et <a href="https://openlibrary.org" target="_blank" rel="noopener">Open Library</a>, filtré sur les ouvrages en langue française.
       Les liens d'achat mènent vers des librairies en ligne ; les prix et la disponibilité sont ceux affichés par chaque revendeur.</p>
+      <p><a href="#/a-propos">À propos de Biblio FR, sources et données personnelles</a></p>
     </div>
   </footer>
 
@@ -93,7 +116,9 @@
   <script src="js/features/profiles.js"></script>
   <script src="js/features/library.js"></script>
   <script src="js/features/moderation.js"></script>
+  <script src="js/features/social.js"></script>
   <script src="js/views/discover.js"></script>
+  <script src="js/views/about.js"></script>
   <script src="js/router.js"></script>
 </body>
 </html>

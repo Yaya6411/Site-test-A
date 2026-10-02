@@ -38,7 +38,7 @@ const isUp = name => !(sourceDownUntil[name] > Date.now());
 // Interroge les sources (toutes en parallèle, ou la préférée avec bascule) sans post-traitement.
 async function fetchSources(query, page, sort) {
   const mode = getSource();
-  const all = Object.keys(sources);
+  const all = Object.keys(sources).filter(sourceUsable);
 
   if (mode === "all") {
     const names = all.filter(isUp).length ? all.filter(isUp) : all;
@@ -56,7 +56,8 @@ async function fetchSources(query, page, sort) {
       total: ok.reduce((n, r) => n + r.total, 0),
       hasMore: ok.some(r => r.hasMore),
       sourceLabel: ok.map(r => sources[r.name].label).join(" + "),
-      warnings: settled.filter(r => r.status === "rejected").map(r => r.reason.message),
+      // La BnF est expérimentale : son indisponibilité n'est pas signalée au lecteur.
+      warnings: settled.map((r, i) => r.status === "rejected" && names[i] !== "bnf" ? r.reason.message : "").filter(Boolean),
     };
   }
 

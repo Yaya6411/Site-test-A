@@ -86,3 +86,6 @@ function skeletonHtml(n = 8) {
     Array.from({ length: n }, () => `<div class="skeleton-card"><div class="sk-cover"></div><div class="sk-line"></div><div class="sk-line short"></div></div>`).join("")
   }</div><p class="sr-only" role="status">Chargement…</p>`;
 }
+
+const shelfSkeleton = (n = 6) => Array.from({ length: n }, () =>
+  `<div class="skeleton-card" aria-hidden="true"><div class="sk-cover"></div><div class="sk-line"></div><div class="sk-line short"></div></div>`).join("");

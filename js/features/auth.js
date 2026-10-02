@@ -372,6 +372,11 @@ function viewAccount() {
     try {
       const mine = await firestoreReviews.listByUser(user.uid);
       for (const r of mine) await firestoreReviews.remove(r.bookKey, r);
+      // Abonnements et abonnés.
+      for (const id of await social.followingIds(user.uid)) await social.unfollow(id).catch(() => {});
+      for (const f of await firestore.list(`users/${user.uid}/followers`).catch(() => [])) {
+        await firestore.remove(`users/${user.uid}/followers/${f.id}`).catch(() => {});
+      }
       // Bibliothèque et listes du compte.
       await Promise.all([...library.entries.keys()].map(k => firestore.remove(`users/${user.uid}/library/${k}`)));
       await Promise.all([...library.lists.keys()].map(id => firestore.remove(`users/${user.uid}/lists/${id}`)));

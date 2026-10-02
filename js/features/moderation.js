@@ -41,7 +41,7 @@ function renderAdminLink() {
       link.id = "admin-link";
       link.href = "#/moderation";
       link.textContent = "Modération";
-      nav.insertBefore(link, document.getElementById("settings-btn"));
+      nav.appendChild(link);
     }
   } else if (link) {
     link.remove();

@@ -301,6 +301,7 @@ async function viewReader(uid) {
         <h1 class="page-title">${esc(p.name)}</h1>
         <p class="muted">${esc(memberSince(p.createdAt))}</p>
         ${isMe ? `<a href="#/compte" class="small">Modifier mon profil</a>` : ""}
+        <div class="follow-box" id="follow-box"></div>
       </div>
       <dl class="profile-stats">
         <div><dt>Livres notés</dt><dd>${reviews.length}</dd></div>
@@ -339,6 +340,7 @@ async function viewReader(uid) {
         : `<p class="muted">${isMe ? "Vous n'avez pas encore donné d'avis." : "Ce lecteur n'a pas encore donné d'avis."}</p>`}
     </section>`;
   renderPublicLibrary(uid, profile);
+  renderFollowBox(uid);
 }
 
 // Bibliothèque et listes publiques d'un lecteur (si il a choisi de les montrer).

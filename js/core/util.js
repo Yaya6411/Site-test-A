@@ -44,6 +44,8 @@ function storeUrl(store, book) {
 
 const loadingHtml = `<div class="loading"><span class="spinner"></span> Chargement…</div>`;
 
+const DEFAULT_DESCRIPTION = "Parcourez les livres disponibles en français : romans, mangas, BD, essais… par genre ou par auteur, avec un lien d'achat pour chaque ouvrage.";
+
 // Met à jour la description de la page (partage de liens, moteurs de recherche).
 function setPageMeta(description) {
   let tag = document.querySelector('meta[name="description"]');
