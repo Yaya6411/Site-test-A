@@ -104,6 +104,13 @@ document.getElementById("settings-btn").addEventListener("click", () => {
 prefSource.addEventListener("change", () => { prefs.set("source", prefSource.value); route(); });
 prefStore.addEventListener("change", () => { prefs.set("store", prefStore.value); route(); });
 
+document.getElementById("clear-cache").addEventListener("click", e => {
+  persistentCache.clear();
+  resultCache.clear();
+  try { localStorage.removeItem("bibliofr.mustReads"); } catch { /* ignoré */ }
+  e.target.textContent = "Cache vidé ✓";
+});
+
 attachAutocomplete(document.getElementById("search-input"));
 
 window.addEventListener("hashchange", route);

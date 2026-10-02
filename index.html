@@ -63,6 +63,8 @@
       <select id="pref-store"></select>
     </label>
     <p class="muted">Les préférences sont enregistrées dans votre navigateur.</p>
+    <p class="muted small">Les résultats de recherche sont gardés quelques heures dans votre navigateur pour aller plus vite.
+      <button type="button" class="link-btn" id="clear-cache">Vider le cache</button></p>
   </dialog>
 
   <footer class="site-footer">
@@ -77,6 +79,7 @@
   <script src="vendor/firebase-auth-compat.js"></script>
   <!-- Ordre important : chaque fichier utilise les fonctions des précédents. -->
   <script src="js/core/util.js"></script>
+  <script src="js/services/cache.js"></script>
   <script src="js/services/sources.js"></script>
   <script src="js/services/quality.js"></script>
   <script src="js/services/search.js"></script>

@@ -11,13 +11,21 @@ const sourceDownUntil = {};
 const resultCache = new Map();
 
 async function fetchFrom(name, query, page, sort) {
-  const queryKey = query.type === "genre" ? query.value.id : query.value;
+  const queryKey = query.type === "genre" || query.type === "recent" ? (query.value ? query.value.id : "") : query.value;
   const cacheKey = JSON.stringify([name, query.type, queryKey, page, sort]);
+  // 1. mémoire de la page, 2. cache persistant du navigateur, 3. réseau (mutualisé et limité).
   if (resultCache.has(cacheKey)) return resultCache.get(cacheKey);
+  const stored = persistentCache.get(cacheKey);
+  if (stored) {
+    stored.books.forEach(b => bookCache.set(b.id, b));
+    resultCache.set(cacheKey, stored);
+    return stored;
+  }
   try {
-    const result = await sources[name].fetch(query, page, sort);
+    const result = await dedupedFetch(cacheKey, () => sources[name].fetch(query, page, sort));
     result.books.forEach(b => bookCache.set(b.id, b));
     resultCache.set(cacheKey, result);
+    if (result.books.length) persistentCache.set(cacheKey, slimResult(result), CACHE_TTL[query.type] || CACHE_TTL.all);
     return result;
   } catch (err) {
     sourceDownUntil[name] = Date.now() + SOURCE_COOLDOWN_MS;
