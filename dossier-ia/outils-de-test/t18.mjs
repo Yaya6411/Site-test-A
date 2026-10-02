@@ -1,0 +1,21 @@
+import { chromium } from 'playwright';
+import { installCommon } from './fsmock.mjs';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const ctx = await b.newContext(); const p = await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+await installCommon(p, {fakeAuth:false});
+let calls=0, active=0, maxActive=0;
+const slow = async (r, body) => { calls++; active++; maxActive=Math.max(maxActive,active); await new Promise(x=>setTimeout(x,150)); active--; r.fulfill({json:body}); };
+await p.route('https://www.googleapis.com/**', r=>slow(r,{totalItems:1,items:[{id:'x'+Math.random(),volumeInfo:{title:'Livre',authors:['A'],language:'fr'}}]}));
+await p.route('https://openlibrary.org/**', r=>slow(r,{numFound:0,docs:[]}));
+const go=h=>p.goto('file:///home/user/Site-test-A/index.html'+h);
+await go('#/genre/policier'); await p.waitForSelector('#results .book-card'); const first=calls;
+await go('#/genre/policier'); await p.waitForSelector('#results .book-card'); console.log('genre: 1re visite', first, 'requêtes · 2e visite (page rechargée)', calls-first);
+calls=0; maxActive=0; await go('#/incontournables/mangas'); await p.waitForTimeout(4000);
+console.log('incontournables (18 livres × 2 sources):', calls, 'requêtes, au plus', maxActive, 'en même temps');
+calls=0; await go('#/incontournables/mangas'); await p.waitForTimeout(800); console.log('incontournables 2e visite:', calls, 'requêtes');
+// requêtes identiques simultanées
+calls=0; await p.evaluate(()=>{ persistentCache.clear(); resultCache.clear(); return Promise.all([searchBooks({type:'all',value:'dune'}), searchBooks({type:'all',value:'dune'}), searchBooks({type:'all',value:'dune'})]); });
+console.log('3 recherches identiques simultanées:', calls, 'requêtes (2 sources)');
+console.log('taille du cache:', await p.evaluate(()=>Object.keys(persistentCache.index()).length), 'entrées');
+await p.click('#settings-btn'); await p.click('#clear-cache'); console.log('vidage:', await p.textContent('#clear-cache'), await p.evaluate(()=>Object.keys(persistentCache.index()).length));
+console.log('errs', errs); await b.close();

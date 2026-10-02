@@ -1,0 +1,15 @@
+import { chromium } from 'playwright';
+import { installCommon, installFirestore, installBooks } from './fsmock.mjs';
+const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const p = await b.newPage({viewport:{width:1100,height:1300}}); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
+const docs={}, log=[]; await installCommon(p); await installFirestore(p, docs, log);
+await installBooks(p, [{id:'d1',volumeInfo:{title:'Dune',authors:['Frank Herbert'],language:'fr'}}]);
+await p.goto('file:///home/user/Site-test-A/index.html#/recherche/all/dune'); await p.waitForSelector('#account-area [data-auth=login]');
+await p.click('#account-area [data-auth=login]'); await p.fill('#auth-email','y@x.fr'); await p.fill('#auth-password','goodpass1'); await p.click('#auth-form button[type=submit]'); await p.waitForTimeout(600);
+console.log('profil + pseudo réservés à la connexion:', !!docs['users/u123'], !!docs['usernames/yaya']);
+await p.click('.book-open'); await p.waitForSelector('.review-form'); await p.click('label[for=rate-4]'); await p.fill('#review-comment','Bien'); await p.click('.review-form button[type=submit]');
+await p.waitForSelector('[data-edit-review]'); await p.click('[data-edit-review]'); await p.click('label[for=edit-rate-2]'); await p.fill('#edit-comment','Bof'); await p.click('.review-edit button[type=submit]'); await p.waitForTimeout(400);
+const k='reviews/u123__dune|herbert'; console.log('après modification:', docs[k].rating, docs[k].comment.stringValue, '| updatedAt serveur:', !!docs[k].updatedAt);
+console.log('affiché:', (await p.locator('.review-list li').first().innerText()).replace(/\s+/g,' '));
+await p.click('[data-delete-review]'); await p.click('[data-delete-review]'); await p.waitForTimeout(300); console.log('supprimé:', !docs[k]);
+console.log('errs', errs); await b.close();
