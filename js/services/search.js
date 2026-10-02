@@ -26,29 +26,23 @@ async function fetchFrom(name, query, page, sort) {
 }
 
 const isUp = name => !(sourceDownUntil[name] > Date.now());
-const bookKey = b => b.isbn || (b.title + "|" + (b.authors[0] || "")).toLowerCase();
 
-async function searchBooks(query, page = 0, sort = "relevance") {
+// Interroge les sources (toutes en parallèle, ou la préférée avec bascule) sans post-traitement.
+async function fetchSources(query, page, sort) {
   const mode = getSource();
   const all = Object.keys(sources);
 
   if (mode === "all") {
-    // Toutes les sources en parallèle, résultats entremêlés et dédoublonnés.
     const names = all.filter(isUp).length ? all.filter(isUp) : all;
     const settled = await Promise.allSettled(names.map(n => fetchFrom(n, query, page, sort)));
     const ok = settled.map((r, i) => r.status === "fulfilled" && { ...r.value, name: names[i] }).filter(Boolean);
     if (!ok.length) {
       throw new Error(`Le catalogue est momentanément indisponible (${settled[0].reason.message}). Réessayez dans un instant.`);
     }
-    const seen = new Set();
+    // Résultats entremêlés : chaque source garde sa place dans le classement initial.
     const books = [];
     const longest = Math.max(...ok.map(r => r.books.length));
-    for (let i = 0; i < longest; i++) {
-      for (const r of ok) {
-        const b = r.books[i];
-        if (b && !seen.has(bookKey(b))) { seen.add(bookKey(b)); books.push(b); }
-      }
-    }
+    for (let i = 0; i < longest; i++) for (const r of ok) if (r.books[i]) books.push(r.books[i]);
     return {
       books,
       total: ok.reduce((n, r) => n + r.total, 0),
@@ -69,4 +63,30 @@ async function searchBooks(query, page = 0, sort = "relevance") {
     }
   }
   throw new Error(`Le catalogue est momentanément indisponible (${lastError.message}). Réessayez dans un instant.`);
+}
+
+// Recherche complète : sources → regroupement des éditions → filtrage → classement par pertinence.
+async function searchBooks(query, page = 0, sort = "relevance") {
+  const result = await fetchSources(query, page, sort);
+  let books = result.books;
+
+  // Peu de résultats pour un auteur : nouvelle tentative avec son seul nom de famille.
+  if (query.type === "author" && page === 0 && books.length < 5) {
+    const surname = authorVariant(query.value);
+    if (surname && surname !== norm(query.value)) {
+      try {
+        const extra = await fetchSources({ type: "author", value: surname }, 0, sort);
+        books = books.concat(extra.books.filter(b => tokens(b.authors.join(" ")).includes(surname)));
+      } catch { /* la recherche principale suffit */ }
+    }
+  }
+
+  if (query.type === "genre" || query.type === "recent") {
+    books = books.filter(b => !isGenreFalsePositive(b, query.value));
+  }
+  books = dedupeWorks(books);
+  // Les identifiants des éditions fusionnées ouvrent la même fiche.
+  books.forEach(b => { bookCache.set(b.id, b); (b.altIds || []).forEach(id => bookCache.set(id, b)); });
+  if (sort === "relevance") books = rankByRelevance(books, query);
+  return { ...result, books };
 }

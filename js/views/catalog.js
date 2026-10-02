@@ -94,6 +94,7 @@ function viewAuthors() {
     </div>
     <div class="author-grid" id="author-list">${FEATURED_AUTHORS.map(authorChipHtml).join("")}</div>`;
 
+  attachAutocomplete(document.getElementById("author-input"), { types: ["Auteur"] });
   document.getElementById("author-form").addEventListener("submit", e => {
     e.preventDefault();
     const name = document.getElementById("author-input").value.trim();
@@ -108,12 +109,70 @@ function viewAuthors() {
   });
 }
 
+// Catégories des sources (souvent en anglais) ramenées à des libellés français pour les filtres.
+const CATEGORY_LABELS = {
+  "fiction": "Fiction", "comics graphic novels": "BD & romans graphiques", "manga": "Mangas",
+  "juvenile fiction": "Jeunesse", "juvenile nonfiction": "Documentaires jeunesse", "young adult fiction": "Young Adult",
+  "science fiction": "Science-fiction", "fantasy": "Fantasy", "mystery detective": "Policier", "mystery": "Policier",
+  "detective and mystery stories": "Policier", "thrillers": "Thriller", "romance": "Romance", "horror": "Horreur",
+  "history": "Histoire", "biography autobiography": "Biographies", "biography": "Biographies", "philosophy": "Philosophie",
+  "poetry": "Poésie", "drama": "Théâtre", "cooking": "Cuisine", "self help": "Développement personnel",
+  "business economics": "Économie", "religion": "Religion", "psychology": "Psychologie", "science": "Sciences",
+  "art": "Art", "travel": "Voyage", "humor": "Humour", "sports recreation": "Sport", "health fitness": "Santé",
+  "political science": "Politique", "social science": "Société", "literary collections": "Recueils",
+  "true crime": "True crime", "nature": "Nature", "music": "Musique", "computers": "Informatique",
+};
+
+function bookCategoryLabels(book) {
+  const labels = new Set();
+  for (const c of book.categories) {
+    for (const part of String(c).split(/\s*\/\s*/)) {
+      const label = CATEGORY_LABELS[norm(part)];
+      if (label) labels.add(label);
+    }
+  }
+  return [...labels];
+}
+
+const YEAR_BUCKETS = [
+  { id: "2020", label: "2020 et après", test: y => y >= 2020 },
+  { id: "2010", label: "2010 – 2019", test: y => y >= 2010 && y < 2020 },
+  { id: "2000", label: "2000 – 2009", test: y => y >= 2000 && y < 2010 },
+  { id: "1980", label: "1980 – 1999", test: y => y >= 1980 && y < 2000 },
+  { id: "old", label: "Avant 1980", test: y => y > 0 && y < 1980 },
+];
+
+function topCounts(values, limit) {
+  const counts = new Map();
+  values.forEach(v => counts.set(v, (counts.get(v) || 0) + 1));
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "fr")).slice(0, limit);
+}
+
+// Message utile quand rien n'est trouvé : propositions proches et pistes.
+function noResultsHtml(query) {
+  const text = typeof query.value === "string" ? query.value : "";
+  const ideas = text ? didYouMean(text) : [];
+  return `
+    <div class="empty no-results">
+      <p><strong>Aucun livre en français trouvé.</strong></p>
+      ${ideas.length ? `<p>Vouliez-vous dire : ${ideas.map(e => `<a href="${e.href}">${esc(e.label)}</a>`).join(", ")} ?</p>` : ""}
+      <ul class="tips">
+        <li>Vérifiez l'orthographe ou essayez moins de mots.</li>
+        ${text ? `<li>Cherchez <a href="#/recherche/title/${enc(text)}">dans les titres</a> ou <a href="${authorLink(text)}">parmi les auteurs</a>.</li>` : ""}
+        <li>Parcourez <a href="#/genres">les genres</a> ou <a href="#/incontournables">les incontournables</a>.</li>
+        <li>Changez de source du catalogue dans les préférences ⚙️.</li>
+      </ul>
+    </div>`;
+}
+
 function viewResults({ title, subtitle = "", query }) {
   document.title = `${title} — Biblio FR`;
   let page = 0;
   let sort = "relevance";
   let token = 0;
-  const seen = new Set();
+  let books = [];               // tous les livres chargés, déjà dédoublonnés
+  const seenWorks = new Set();  // œuvres déjà affichées (évite les doublons entre pages)
+  const filters = { year: "", author: "", category: "" };
 
   app.innerHTML = `
     <div class="results-head">
@@ -128,7 +187,8 @@ function viewResults({ title, subtitle = "", query }) {
         </select>
       </label>
     </div>
-    <p id="results-count" class="muted"></p>
+    <div class="filters" id="filters" hidden></div>
+    <p id="results-count" class="muted" aria-live="polite"></p>
     <div class="book-grid" id="results"></div>
     <div id="results-status"></div>
     <div class="more-wrap"><button id="more-btn" class="more-btn" hidden>Charger plus de livres</button></div>`;
@@ -137,23 +197,70 @@ function viewResults({ title, subtitle = "", query }) {
   const status = document.getElementById("results-status");
   const moreBtn = document.getElementById("more-btn");
   const count = document.getElementById("results-count");
+  const filtersBox = document.getElementById("filters");
+  let summary = "";
+
+  const matches = b => {
+    if (filters.year) {
+      const bucket = YEAR_BUCKETS.find(x => x.id === filters.year);
+      if (!bucket.test(Number(b.year) || 0)) return false;
+    }
+    if (filters.author && !b.authors.includes(filters.author)) return false;
+    if (filters.category && !bookCategoryLabels(b).includes(filters.category)) return false;
+    return true;
+  };
+
+  function renderFilters() {
+    if (books.length < 6) { filtersBox.hidden = true; return; }
+    const years = YEAR_BUCKETS.filter(x => books.some(b => x.test(Number(b.year) || 0)));
+    const authors = topCounts(books.flatMap(b => b.authors.slice(0, 1)), 15);
+    const cats = topCounts(books.flatMap(bookCategoryLabels), 15);
+    const select = (id, label, options) => `
+      <label>${label}
+        <select data-filter="${id}">
+          <option value="">Tous</option>
+          ${options.map(([v, l]) => `<option value="${esc(v)}"${filters[id] === v ? " selected" : ""}>${esc(l)}</option>`).join("")}
+        </select>
+      </label>`;
+    filtersBox.innerHTML = `
+      <span class="filters-title">Affiner :</span>
+      ${select("year", "Année", years.map(x => [x.id, x.label]))}
+      ${authors.length > 1 ? select("author", "Auteur", authors.map(([a, n]) => [a, `${a} (${n})`])) : ""}
+      ${cats.length > 1 ? select("category", "Genre", cats.map(([c, n]) => [c, `${c} (${n})`])) : ""}
+      ${Object.values(filters).some(Boolean) ? `<button type="button" class="link-btn" data-reset-filters>Effacer les filtres</button>` : ""}`;
+    filtersBox.hidden = false;
+  }
+
+  function renderGrid() {
+    const shown = books.filter(matches);
+    grid.innerHTML = shown.map(bookCardHtml).join("");
+    const filtered = Object.values(filters).some(Boolean);
+    count.textContent = filtered
+      ? `${shown.length} livre${shown.length > 1 ? "s" : ""} sur ${books.length} chargés correspondent aux filtres`
+      : summary;
+    if (!books.length) status.innerHTML = noResultsHtml(query);
+    else if (!shown.length) status.innerHTML = `<p class="empty">Aucun livre chargé ne correspond à ces filtres. <button type="button" class="link-btn" data-reset-filters>Effacer les filtres</button></p>`;
+    else status.innerHTML = "";
+  }
 
   async function load() {
     const current = ++token;
     moreBtn.hidden = true;
-    status.innerHTML = loadingHtml;
+    status.innerHTML = skeletonHtml(page ? 6 : 12);
     try {
-      const { books, total, hasMore, sourceLabel, warnings = [] } = await searchBooks(query, page, sort);
+      const result = await searchBooks(query, page, sort);
       if (current !== token) return;
-      const fresh = books.filter(b => !seen.has(b.id));
-      fresh.forEach(b => seen.add(b.id));
-      grid.insertAdjacentHTML("beforeend", fresh.map(bookCardHtml).join(""));
-      status.innerHTML = seen.size === 0
-        ? `<p class="empty">Aucun livre en français trouvé. Essayez une autre orthographe ou changez de source dans les préférences ⚙️.</p>`
-        : "";
-      if (total) count.textContent = `Environ ${total.toLocaleString("fr-FR")} résultats · source : ${sourceLabel}${warnings.length ? " · " + warnings.join(" · ") : ""}`;
+      const fresh = result.books.filter(b => !seenWorks.has(workKey(b)));
+      fresh.forEach(b => seenWorks.add(workKey(b)));
+      books = books.concat(fresh);
+      if (result.total) {
+        summary = `Environ ${result.total.toLocaleString("fr-FR")} résultats · ${books.length} affichés · source : ${result.sourceLabel}`
+          + (result.warnings && result.warnings.length ? " · " + result.warnings.join(" · ") : "");
+      }
+      renderFilters();
+      renderGrid();
       moreBtn.textContent = "Charger plus de livres";
-      moreBtn.hidden = !hasMore;
+      moreBtn.hidden = !result.hasMore;
     } catch (err) {
       if (current !== token) return;
       status.innerHTML = `<p class="error">${esc(err.message)}</p>`;
@@ -163,6 +270,22 @@ function viewResults({ title, subtitle = "", query }) {
     }
   }
 
+  filtersBox.addEventListener("change", e => {
+    const sel = e.target.closest("[data-filter]");
+    if (!sel) return;
+    filters[sel.dataset.filter] = sel.value;
+    renderFilters();
+    renderGrid();
+  });
+  // Écouteurs posés sur des éléments de la vue (et non sur #app, qui survit aux changements de page).
+  const resetFilters = e => {
+    if (!e.target.closest("[data-reset-filters]")) return;
+    Object.keys(filters).forEach(k => { filters[k] = ""; });
+    renderFilters();
+    renderGrid();
+  };
+  filtersBox.addEventListener("click", resetFilters);
+  status.addEventListener("click", resetFilters);
   moreBtn.addEventListener("click", () => {
     if (moreBtn.dataset.retry) delete moreBtn.dataset.retry;
     else page++;
@@ -171,7 +294,8 @@ function viewResults({ title, subtitle = "", query }) {
   document.getElementById("sort-select").addEventListener("change", e => {
     sort = e.target.value;
     page = 0;
-    seen.clear();
+    books = [];
+    seenWorks.clear();
     grid.innerHTML = "";
     count.textContent = "";
     load();

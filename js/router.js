@@ -98,6 +98,8 @@ document.getElementById("settings-btn").addEventListener("click", () => {
 prefSource.addEventListener("change", () => { prefs.set("source", prefSource.value); route(); });
 prefStore.addEventListener("change", () => { prefs.set("store", prefStore.value); route(); });
 
+attachAutocomplete(document.getElementById("search-input"));
+
 window.addEventListener("hashchange", route);
 // Premier affichage une fois tous les scripts chargés (auth.js fournit la page « Mon compte »).
 document.addEventListener("DOMContentLoaded", route);

@@ -67,7 +67,7 @@ const sources = {
         limit: PAGE_SIZE,
         page: page + 1,
         // "editions" renvoie l'édition qui correspond au filtre de langue (la version française).
-        fields: "key,title,subtitle,author_name,first_publish_year,isbn,cover_i,subject,publisher,number_of_pages_median," +
+        fields: "key,title,subtitle,author_name,first_publish_year,isbn,cover_i,subject,publisher,number_of_pages_median,language," +
                 "editions,editions.key,editions.title,editions.subtitle,editions.isbn,editions.cover_i,editions.publisher,editions.publish_date",
       });
       const { type, value } = query;
@@ -83,6 +83,8 @@ const sources = {
       if (!res.ok) throw new Error(`Open Library : erreur ${res.status}`);
       const data = await res.json();
       const books = (data.docs || [])
+        // Langue française confirmée : édition française trouvée ou œuvre marquée « fre ».
+        .filter(doc => (doc.editions && doc.editions.docs && doc.editions.docs.length) || (doc.language || []).includes("fre"))
         .filter(doc => !isLowContent(doc.title, doc.subtitle, doc.subject))
         .map(normalizeOpenLibrary);
       return { books, total: data.numFound || 0, hasMore: (page + 1) * PAGE_SIZE < (data.numFound || 0) };

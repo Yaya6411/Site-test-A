@@ -527,3 +527,43 @@ a.reviewer:hover { color: var(--accent); }
 
 .review-edit { margin: 4px 0 0; }
 .edit-actions { display: flex; align-items: center; gap: 16px; }
+
+/* ---------- Recherche : autocomplétion, filtres, chargement ---------- */
+
+.ac-wrap { position: relative; }
+.search.ac-wrap { position: relative; }
+.ac-list {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+  list-style: none; margin: 0; padding: 6px; max-height: 360px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+}
+.ac-list li {
+  display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 10px; align-items: baseline;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+}
+.ac-list li[aria-selected="true"], .ac-list li:hover { background: var(--accent-soft); }
+.ac-type { grid-row: span 2; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
+.ac-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-sub { font-size: .8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.filters {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px;
+  margin: 14px 0 4px; padding: 12px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.filters[hidden] { display: none; }
+.filters-title { font-weight: 700; align-self: center; }
+.filters label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--muted); min-width: 0; }
+.filters select { max-width: 220px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+@media (max-width: 640px) { .filters label { flex: 1 1 140px; } .filters select { max-width: none; width: 100%; } }
+
+.no-results { text-align: left; max-width: 560px; margin: 24px auto; }
+.no-results .tips { color: var(--muted); padding-left: 20px; }
+
+.skeleton-card { display: flex; flex-direction: column; gap: 8px; }
+.sk-cover, .sk-line { background: var(--border); border-radius: 8px; animation: sk-pulse 1.2s ease-in-out infinite; }
+.sk-cover { aspect-ratio: 2 / 3; }
+.sk-line { height: 12px; }
+.sk-line.short { width: 60%; }
+@keyframes sk-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .sk-cover, .sk-line { animation: none; } }

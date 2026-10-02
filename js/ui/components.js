@@ -15,9 +15,22 @@ function generatedCoverHtml(book) {
           </div>`;
 }
 
+// Adresses d'images déjà en échec pendant cette visite : inutile de les réessayer.
+const badCovers = (() => {
+  try { return new Set(JSON.parse(sessionStorage.getItem("bibliofr.badCovers") || "[]")); } catch { return new Set(); }
+})();
+
+function rememberBadCover(url) {
+  badCovers.add(url);
+  try { sessionStorage.setItem("bibliofr.badCovers", JSON.stringify([...badCovers].slice(-500))); } catch { /* stockage indisponible */ }
+}
+
+const usableCovers = book => book.covers.filter(u => !badCovers.has(u));
+
 function coverHtml(book) {
-  if (!book.covers.length) return generatedCoverHtml(book);
-  return `<img src="${esc(book.covers[0])}" alt="" loading="lazy" referrerpolicy="no-referrer"
+  const covers = usableCovers(book);
+  if (!covers.length) return generatedCoverHtml(book);
+  return `<img src="${esc(covers[0])}" alt="Couverture de ${esc(book.title)}" loading="lazy" referrerpolicy="no-referrer"
                data-book-id="${esc(book.id)}" data-cover-index="0"
                onload="coverLoaded(this)" onerror="coverFailed(this)">`;
 }
@@ -29,11 +42,13 @@ function coverLoaded(img) {
 
 // Passe à l'image suivante, ou dessine une couverture si plus aucune n'est disponible.
 function coverFailed(img) {
+  rememberBadCover(img.currentSrc || img.src);
   const book = bookCache.get(img.dataset.bookId);
-  const next = Number(img.dataset.coverIndex) + 1;
-  if (book && next < book.covers.length) {
-    img.dataset.coverIndex = next;
-    img.src = book.covers[next];
+  const covers = book ? usableCovers(book) : [];
+  const attempts = Number(img.dataset.coverIndex) + 1;
+  if (book && covers.length && attempts <= book.covers.length) {
+    img.dataset.coverIndex = attempts;
+    img.src = covers[0];
   } else if (book) {
     img.outerHTML = generatedCoverHtml(book);
   } else {
@@ -62,4 +77,11 @@ function genreCardHtml(g) {
 
 function authorChipHtml(a) {
   return `<a class="author-chip" href="${authorLink(a.name)}"><strong>${esc(a.name)}</strong><small>${esc(a.tag)}</small></a>`;
+}
+
+// Cartes grisées affichées pendant le chargement (plus lisible qu'un simple indicateur).
+function skeletonHtml(n = 8) {
+  return `<div class="book-grid skeleton-grid" aria-hidden="true">${
+    Array.from({ length: n }, () => `<div class="skeleton-card"><div class="sk-cover"></div><div class="sk-line"></div><div class="sk-line short"></div></div>`).join("")
+  }</div><p class="sr-only" role="status">Chargement…</p>`;
 }
