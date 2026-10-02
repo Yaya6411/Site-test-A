@@ -32,8 +32,9 @@ async function reviewsSince(days) {
       bookKey: f.bookKey?.stringValue || "",
       title: f.title?.stringValue || "",
       rating: Number(f.rating?.integerValue || 0),
+      hidden: Boolean(f.hidden?.booleanValue),
     };
-  });
+  }).filter(r => !r.hidden);
 }
 
 // Regroupe les avis par livre : nombre d'avis puis note moyenne.

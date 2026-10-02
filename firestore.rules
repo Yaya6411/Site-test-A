@@ -1,11 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Avis des lecteurs : lecture publique ; création par un compte connecté
-    // (un seul avis par compte et par livre) ; suppression par son auteur uniquement.
+
+    function signedIn() { return request.auth != null; }
+    function isUser(uid) { return signedIn() && request.auth.uid == uid; }
+    // Modérateurs : un document admins/{uid} créé à la main dans la console.
+    function isAdmin() { return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)); }
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // ---------------------------------------------------------------------
+    // Avis des lecteurs
+    //  - lecture publique (les avis masqués sont filtrés par le site) ;
+    //  - création par un compte à l'e-mail vérifié, un seul avis par compte
+    //    et par livre, date fixée par le serveur ;
+    //  - l'auteur peut modifier sa note, son commentaire et son pseudo, ou
+    //    supprimer son avis ; un modérateur peut le masquer ou le supprimer.
+    // ---------------------------------------------------------------------
     match /reviews/{reviewId} {
       allow read: if true;
-      allow create: if request.auth != null
+      allow create: if verified()
         && reviewId == request.auth.uid + '__' + request.resource.data.bookKey
         && request.resource.data.keys().hasOnly(['uid', 'bookKey', 'title', 'rating', 'name', 'comment', 'createdAt'])
         && request.resource.data.uid == request.auth.uid
@@ -14,53 +28,89 @@ service cloud.firestore {
         && request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
         && request.resource.data.name is string && request.resource.data.name.size() <= 50
         && request.resource.data.comment is string && request.resource.data.comment.size() <= 2000
-        && request.resource.data.createdAt is timestamp;
-      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
-      // L'auteur peut modifier sa note, son commentaire et son pseudo affiché.
-      allow update: if request.auth != null && resource.data.uid == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'rating', 'comment', 'updatedAt'])
-        && request.resource.data.name is string && request.resource.data.name.size() <= 50
-        && request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
-        && request.resource.data.comment is string && request.resource.data.comment.size() <= 2000
-        && (!('updatedAt' in request.resource.data) || request.resource.data.updatedAt is timestamp);
+        && request.resource.data.createdAt == request.time;
+      allow update: if (
+          isUser(resource.data.uid)
+          && changed().hasOnly(['name', 'rating', 'comment', 'updatedAt'])
+          && request.resource.data.name is string && request.resource.data.name.size() <= 50
+          && request.resource.data.rating is int && request.resource.data.rating >= 1 && request.resource.data.rating <= 5
+          && request.resource.data.comment is string && request.resource.data.comment.size() <= 2000
+          && (!changed().hasAny(['updatedAt']) || request.resource.data.updatedAt == request.time)
+        ) || (
+          isAdmin() && changed().hasOnly(['hidden']) && request.resource.data.hidden is bool
+        );
+      allow delete: if isUser(resource.data.uid) || isAdmin();
     }
 
-    // Profils publics : pseudo et date d'inscription (jamais l'e-mail).
-    // Lecture publique ; chaque compte ne peut écrire que son propre profil.
+    // Signalements : un par lecteur et par avis ; seuls les modérateurs les lisent.
+    match /reports/{reportId} {
+      allow create: if signedIn()
+        && reportId == request.auth.uid + '__' + request.resource.data.reviewId
+        && request.resource.data.keys().hasOnly(['reviewId', 'reviewUid', 'bookKey', 'title', 'reason', 'reporterUid', 'createdAt'])
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.reviewId is string && request.resource.data.reviewId.size() <= 400
+        && request.resource.data.reason in ['spam', 'abuse', 'spoiler', 'offtopic', 'other']
+        && request.resource.data.title is string && request.resource.data.title.size() <= 300
+        && request.resource.data.createdAt == request.time;
+      allow read, delete: if isAdmin();
+    }
+
+    // Modérateurs : chacun peut seulement vérifier s'il en fait partie.
+    match /admins/{uid} {
+      allow read: if isUser(uid);
+    }
+
+    // Pseudos réservés : usernames/{pseudo en minuscules} → { uid }.
+    match /usernames/{name} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.nameLower == name;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // ---------------------------------------------------------------------
+    // Profils publics : pseudo (unique), date d'inscription, photo, avatar,
+    // choix d'afficher sa bibliothèque. Jamais l'e-mail.
+    // ---------------------------------------------------------------------
     match /users/{userId} {
       allow read: if true;
-      allow create, update: if request.auth != null && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['name', 'nameLower', 'createdAt', 'photoURL', 'showLibrary'])
-        && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 30
+      allow create, update: if isUser(userId)
+        && request.resource.data.keys().hasOnly(['name', 'nameLower', 'createdAt', 'photoURL', 'avatar', 'showLibrary'])
+        && request.resource.data.name is string && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 30
         && request.resource.data.nameLower == request.resource.data.name.lower()
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.nameLower)).data.uid == request.auth.uid
         && request.resource.data.createdAt is timestamp
-        && request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 500;
-      allow delete: if request.auth != null && request.auth.uid == userId;
+        && request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 500
+        && (!('avatar' in request.resource.data) || (request.resource.data.avatar is string && request.resource.data.avatar.size() <= 16))
+        && (!('showLibrary' in request.resource.data) || request.resource.data.showLibrary is bool);
+      allow delete: if isUser(userId);
 
       // Bibliothèque personnelle : visible par son propriétaire, et par tous
       // seulement s'il a choisi « Afficher ma bibliothèque » (showLibrary).
       match /library/{entryId} {
-        allow read: if (request.auth != null && request.auth.uid == userId)
+        allow read: if isUser(userId)
           || get(/databases/$(database)/documents/users/$(userId)).data.get('showLibrary', false) == true;
-        allow create, update: if request.auth != null && request.auth.uid == userId
+        allow create, update: if isUser(userId)
           && request.resource.data.keys().hasOnly(['title', 'authors', 'cover', 'isbn', 'year', 'pages', 'status', 'favorite', 'addedAt', 'updatedAt', 'readAt'])
           && request.resource.data.title is string && request.resource.data.title.size() <= 300
           && request.resource.data.authors is list && request.resource.data.authors.size() <= 10
           && request.resource.data.cover is string && request.resource.data.cover.size() <= 1000
           && request.resource.data.status in ['', 'to-read', 'reading', 'read']
           && request.resource.data.favorite is bool;
-        allow delete: if request.auth != null && request.auth.uid == userId;
+        allow delete: if isUser(userId);
       }
 
       // Listes personnelles : privées, sauf celles marquées publiques (partageables).
       match /lists/{listId} {
-        allow read: if (request.auth != null && request.auth.uid == userId) || resource.data.public == true;
-        allow create, update: if request.auth != null && request.auth.uid == userId
+        allow read: if isUser(userId) || resource.data.public == true;
+        allow create, update: if isUser(userId)
           && request.resource.data.keys().hasOnly(['name', 'public', 'items', 'createdAt', 'updatedAt'])
           && request.resource.data.name is string && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 60
           && request.resource.data.public is bool
           && request.resource.data.items is list && request.resource.data.items.size() <= 200;
-        allow delete: if request.auth != null && request.auth.uid == userId;
+        allow delete: if isUser(userId);
       }
     }
   }

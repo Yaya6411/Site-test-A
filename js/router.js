@@ -34,6 +34,8 @@ function route() {
       return viewLibrary(arg);
     case "liste":
       return viewPublicList(arg);
+    case "moderation":
+      return viewModeration();
     case "genre": {
       const genre = GENRES.find(g => g.id === arg);
       if (!genre) return viewNotFound();

@@ -47,6 +47,7 @@ function displayName(user) {
 }
 
 const AUTH_ERRORS = {
+  "pseudo-taken": "Ce pseudo est déjà pris. Choisissez-en un autre.",
   "auth/email-already-in-use": "Un compte existe déjà avec cette adresse e-mail. Connectez-vous ou réinitialisez votre mot de passe.",
   "auth/invalid-email": "L'adresse e-mail n'est pas valide.",
   "auth/weak-password": "Le mot de passe doit contenir au moins 6 caractères.",
@@ -83,9 +84,11 @@ function renderAccountButton() {
   const user = currentUser();
   el.innerHTML = user
     ? `<a href="#/compte" class="account-chip" title="Mon compte">
-         <span class="avatar">${user.photoURL
-           ? `<img src="${esc(user.photoURL)}" alt="" referrerpolicy="no-referrer">`
-           : esc(initials(displayName(user)))}</span>
+         ${typeof myProfileCache !== "undefined" && myProfileCache && myProfileCache.avatar
+           ? `<span class="avatar emoji" aria-hidden="true">${esc(myProfileCache.avatar)}</span>`
+           : `<span class="avatar">${user.photoURL
+             ? `<img src="${esc(user.photoURL)}" alt="" referrerpolicy="no-referrer">`
+             : esc(initials(displayName(user)))}</span>`}
          <span class="account-name">${esc(displayName(user))}</span>
        </a>`
     : `<button type="button" class="login-btn" data-auth="login">Se connecter</button>`;
@@ -179,7 +182,8 @@ function renderAuth(mode, notice = "") {
 
     if (mode === "signup") {
       const name = val("auth-name").trim();
-      if (name.length < 2) return showError("Choisissez un pseudo d'au moins 2 caractères.");
+      const pseudoProblem = pseudoError(name);
+      if (pseudoProblem) return showError(pseudoProblem);
       if (val("auth-password").length < 8) return showError("Le mot de passe doit contenir au moins 8 caractères.");
       if (val("auth-password") !== val("auth-password2")) return showError("Les deux mots de passe ne sont pas identiques.");
     }
@@ -188,8 +192,12 @@ function renderAuth(mode, notice = "") {
     submit.textContent = "Veuillez patienter…";
     try {
       if (mode === "signup") {
+        if (!(await isPseudoFree(val("auth-name").trim()))) {
+          throw { code: "pseudo-taken" };
+        }
         const cred = await fbAuth.createUserWithEmailAndPassword(email, val("auth-password"));
         await cred.user.updateProfile({ displayName: val("auth-name").trim() });
+        await syncProfile(cred.user);   // réserve le pseudo
         cred.user.sendEmailVerification().catch(() => {});
         renderAccountButton();
         authListeners.forEach(fn => fn(currentUser()));
@@ -268,9 +276,17 @@ function viewAccount() {
               : `<span class="badge">Non vérifiée</span> <button type="button" class="link-btn" id="resend-verif">Renvoyer l'e-mail de vérification</button>`}
           </p>
           <p class="form-msg small" hidden></p>
-          <p class="muted small">Votre pseudo et vos avis sont visibles par tous sur votre profil public. Votre e-mail reste privé.</p>
+          <p class="muted small">Votre pseudo est unique et visible par tous, comme vos avis. Votre e-mail reste privé.</p>
           <button type="submit" class="buy-btn">Enregistrer</button>
         </form>
+        <hr>
+        <p class="field-static"><strong>Avatar</strong></p>
+        <div class="avatar-picker" role="radiogroup" aria-label="Choisir un avatar">
+          <button type="button" class="avatar-choice" data-avatar="" role="radio" aria-label="Photo ou initiales">${user.photoURL
+            ? `<img src="${esc(user.photoURL)}" alt="" referrerpolicy="no-referrer">` : esc(initials(displayName(user)))}</button>
+          ${AVATARS.map(a => `<button type="button" class="avatar-choice" data-avatar="${a}" role="radio" aria-label="Avatar ${a}">${a}</button>`).join("")}
+        </div>
+        <p class="muted small">Identifiant de compte : <code id="my-uid">${esc(user.uid)}</code></p>
       </section>
 
       <section class="account-card">
@@ -304,21 +320,14 @@ function viewAccount() {
   profileForm.addEventListener("submit", async e => {
     e.preventDefault();
     const name = document.getElementById("profile-name").value.trim();
-    if (name.length < 2) {
-      profileMsg.className = "form-msg small error";
-      profileMsg.textContent = "Le pseudo doit contenir au moins 2 caractères.";
-      profileMsg.hidden = false;
-      return;
-    }
     try {
-      await user.updateProfile({ displayName: name });
-      onProfileRenamed(user).catch(() => {});
+      const problem = name === displayName(user) ? "" : await renamePseudo(user, name);
       renderAccountButton();
-      profileMsg.className = "form-msg small success";
-      profileMsg.textContent = "Pseudo enregistré. Il apparaît sur votre profil et vos avis.";
+      profileMsg.className = `form-msg small ${problem ? "error" : "success"}`;
+      profileMsg.textContent = problem || "Pseudo enregistré. Il apparaît sur votre profil et vos avis.";
     } catch (err) {
       profileMsg.className = "form-msg small error";
-      profileMsg.textContent = authErrorMessage(err);
+      profileMsg.textContent = err.code ? authErrorMessage(err) : err.message;
     }
     profileMsg.hidden = false;
   });
@@ -377,6 +386,19 @@ function viewAccount() {
       securityMsg.textContent = err.code ? authErrorMessage(err) : err.message;
       securityMsg.hidden = false;
     }
+  });
+
+  // Avatar
+  const picker = app.querySelector(".avatar-picker");
+  const markAvatar = value => picker.querySelectorAll(".avatar-choice").forEach(b => {
+    b.setAttribute("aria-checked", String(b.dataset.avatar === value));
+  });
+  getProfile(user.uid).then(p => markAvatar(p ? p.avatar : ""));
+  picker.addEventListener("click", async e => {
+    const btn = e.target.closest("[data-avatar]");
+    if (!btn) return;
+    markAvatar(btn.dataset.avatar);
+    try { await setAvatar(user, btn.dataset.avatar); } catch (err) { profileMsg.className = "form-msg small error"; profileMsg.textContent = err.message; profileMsg.hidden = false; }
   });
 
   // Réglage « bibliothèque publique », enregistré dans le profil public.

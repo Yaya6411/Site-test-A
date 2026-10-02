@@ -8,14 +8,40 @@
 
 const normName = s => (s || "").trim().toLowerCase();
 
-function profileFields(user, createdAt) {
-  const name = displayName(user).slice(0, 30);
-  return {
-    name: { stringValue: name },
-    nameLower: { stringValue: name.toLowerCase() },
-    createdAt: { timestampValue: createdAt },
-    photoURL: { stringValue: (user.photoURL || "").slice(0, 500) },
-  };
+/* ---------- Pseudos uniques -------------------------------------------------
+ * Chaque pseudo est réservé par un document usernames/{pseudo en minuscules}
+ * qui contient l'uid de son propriétaire. Réservation, mise à jour du profil
+ * et libération de l'ancien pseudo se font en une seule écriture atomique.
+ * ------------------------------------------------------------------------- */
+
+const PSEUDO_RE = /^(?=.*[\p{L}\p{N}])[\p{L}\p{N} _.'-]{2,30}$/u;
+
+function pseudoError(name) {
+  const n = (name || "").trim();
+  if (n.length < 2 || n.length > 30) return "Le pseudo doit contenir entre 2 et 30 caractères.";
+  if (!PSEUDO_RE.test(n)) return "Le pseudo ne peut contenir que des lettres, des chiffres, des espaces et les signes _ . ' -";
+  return "";
+}
+
+async function pseudoOwner(name) {
+  const doc = await firestore.get(`usernames/${name.trim().toLowerCase()}`).catch(() => null);
+  return doc ? doc.uid : null;
+}
+
+async function isPseudoFree(name, uid = null) {
+  const owner = await pseudoOwner(name);
+  return !owner || owner === uid;
+}
+
+// Premier pseudo libre parmi « Nom », « Nom 2 », « Nom 3 »…
+async function freePseudo(base, uid) {
+  let clean = String(base || "").replace(/[^\p{L}\p{N} _.'-]/gu, "").trim().slice(0, 26);
+  if (pseudoError(clean)) clean = "Lecteur";
+  for (let i = 1; i <= 50; i++) {
+    const candidate = i === 1 ? clean : `${clean} ${i}`;
+    if (await isPseudoFree(candidate, uid)) return candidate;
+  }
+  return `${clean} ${Date.now().toString(36).slice(-4)}`;
 }
 
 function parseProfile(doc) {
@@ -23,8 +49,10 @@ function parseProfile(doc) {
   return {
     uid: doc.name.split("/").pop(),
     name: f.name?.stringValue || "Lecteur",
+    nameLower: f.nameLower?.stringValue || "",
     createdAt: f.createdAt?.timestampValue || "",
     photoURL: f.photoURL?.stringValue || "",
+    avatar: f.avatar?.stringValue || "",
     showLibrary: Boolean(f.showLibrary?.booleanValue),
   };
 }
@@ -37,26 +65,72 @@ async function getProfile(uid) {
   }
 }
 
-// Crée ou met à jour le profil public du compte connecté.
-async function syncProfile(user) {
-  if (!user || !FIREBASE_PROJECT_ID) return;
-  const createdAt = new Date(user.metadata?.creationTime || Date.now()).toISOString();
-  const existing = await getProfile(user.uid);
-  if (existing && existing.name === displayName(user).slice(0, 30) && existing.photoURL === (user.photoURL || "")) return;
-  const mask = ["name", "nameLower", "photoURL", "createdAt"].map(f => `updateMask.fieldPaths=${f}`).join("&");
-  try {
-    await firestore.request(`${firestore.base()}/users/${encodeURIComponent(user.uid)}?${mask}`, {
-      method: "PATCH",
-      body: JSON.stringify({ fields: profileFields(user, existing && existing.createdAt ? existing.createdAt : createdAt) }),
+let myProfileCache = null;   // profil public du compte connecté (avatar, pseudo…)
+
+// Réserve le pseudo du compte et met à jour son profil public, atomiquement.
+async function claimPseudo(user, name, existing) {
+  const lower = name.toLowerCase();
+  const writes = [];
+  if ((await pseudoOwner(name)) !== user.uid) {
+    writes.push({
+      update: { name: firestore.docName(`usernames/${lower}`), fields: toFirestore({ uid: user.uid }) },
+      currentDocument: { exists: false },
     });
+  }
+  const createdAt = existing && existing.createdAt ? existing.createdAt : new Date(user.metadata?.creationTime || Date.now()).toISOString();
+  writes.push({
+    update: {
+      name: firestore.docName(`users/${user.uid}`),
+      fields: toFirestore({ name, nameLower: lower, createdAt: ts(createdAt), photoURL: (user.photoURL || "").slice(0, 500) }),
+    },
+    updateMask: { fieldPaths: ["name", "nameLower", "createdAt", "photoURL"] },
+  });
+  // Libère l'ancien pseudo s'il appartenait bien à ce compte.
+  if (existing && existing.nameLower && existing.nameLower !== lower && (await pseudoOwner(existing.nameLower)) === user.uid) {
+    writes.push({ delete: firestore.docName(`usernames/${existing.nameLower}`) });
+  }
+  await firestore.commit(writes);
+}
+
+// Crée ou met à jour le profil public du compte connecté, avec un pseudo unique.
+async function syncProfile(user) {
+  if (!user || !FIREBASE_PROJECT_ID || !user.displayName) return;  // inscription en cours : le pseudo arrive juste après
+  try {
+    const existing = await getProfile(user.uid);
+    let name = user.displayName.trim().slice(0, 30);
+    const owned = existing && existing.nameLower && (await pseudoOwner(existing.nameLower)) === user.uid;
+    if (existing && owned && existing.name === name && existing.photoURL === (user.photoURL || "")) {
+      myProfileCache = existing;
+      renderAccountButton();
+      return;
+    }
+    if (pseudoError(name) || !(await isPseudoFree(name, user.uid))) {
+      name = await freePseudo(name, user.uid);
+      await user.updateProfile({ displayName: name });
+    }
+    await claimPseudo(user, name, existing);
+    myProfileCache = await getProfile(user.uid);
+    renderAccountButton();
   } catch (err) {
     console.warn("Profil public non enregistré :", err.message);
   }
 }
 
-// Après un changement de pseudo : met à jour le profil et le nom affiché sur ses avis.
-async function onProfileRenamed(user) {
-  await syncProfile(user);
+// Changement de pseudo depuis « Mon compte ». Renvoie un message d'erreur, ou "" si tout s'est bien passé.
+async function renamePseudo(user, name) {
+  const error = pseudoError(name);
+  if (error) return error;
+  if (!(await isPseudoFree(name, user.uid))) return "Ce pseudo est déjà pris. Choisissez-en un autre.";
+  const existing = await getProfile(user.uid);
+  await claimPseudo(user, name.trim(), existing);
+  await user.updateProfile({ displayName: name.trim() });
+  myProfileCache = await getProfile(user.uid);
+  await renameReviews(user);
+  return "";
+}
+
+// Met à jour le nom affiché sur tous les avis du compte.
+async function renameReviews(user) {
   const name = displayName(user).slice(0, 50);
   const mine = await firestoreReviews.listByUser(user.uid);
   await Promise.all(mine.filter(r => r.name !== name).map(r => {
@@ -69,7 +143,19 @@ async function onProfileRenamed(user) {
 }
 
 async function deleteProfile(uid) {
+  const existing = await getProfile(uid);
+  if (existing && existing.nameLower) await firestore.remove(`usernames/${existing.nameLower}`).catch(() => {});
   await firestore.request(`${firestore.base()}/users/${encodeURIComponent(uid)}`, { method: "DELETE" }).catch(() => {});
+}
+
+/* ---------- Avatar ------------------------------------------------------------ */
+
+const AVATARS = ["📚", "🦊", "🐱", "🐼", "🦉", "🐉", "🌸", "🚀", "🎨", "☕", "🌙", "⚡", "🍀", "🎧", "🧙", "🐢"];
+
+async function setAvatar(user, avatar) {
+  await firestore.patch(`users/${user.uid}`, { avatar });
+  myProfileCache = await getProfile(user.uid);
+  renderAccountButton();
 }
 
 // Pseudos commençant par `prefix` (sans tenir compte des majuscules), ou derniers inscrits si vide.
@@ -100,6 +186,7 @@ async function searchProfiles(prefix) {
 /* ---------- Affichage ----------------------------------------------------- */
 
 function avatarHtml(profile, size = "") {
+  if (profile.avatar) return `<span class="avatar emoji ${size}" aria-hidden="true">${esc(profile.avatar)}</span>`;
   return `<span class="avatar ${size}">${profile.photoURL
     ? `<img src="${esc(profile.photoURL)}" alt="" referrerpolicy="no-referrer">`
     : esc(initials(profile.name))}</span>`;
@@ -192,6 +279,10 @@ async function viewReader(uid) {
     return;
   }
 
+  // Avis masqués par la modération : visibles par leur auteur et les modérateurs seulement.
+  const canSeeHidden = (currentUser() && currentUser().uid === uid) || isAdminCached();
+  for (let i = reviews.length - 1; i >= 0; i--) if (reviews[i].hidden && !canSeeHidden) reviews.splice(i, 1);
+
   const p = profile || { uid, name: (reviews[0] && reviews[0].name) || "Lecteur", createdAt: "", photoURL: "" };
   document.title = `${p.name} — Biblio FR`;
   reviews.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
@@ -275,4 +366,4 @@ async function renderPublicLibrary(uid, profile) {
 }
 
 // Le profil public est créé ou mis à jour à chaque connexion.
-onAuthChange(user => { if (user) syncProfile(user); });
+onAuthChange(user => { myProfileCache = null; if (user) syncProfile(user); });

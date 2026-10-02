@@ -80,6 +80,7 @@ firestore.query = async function query(field, value) {
         comment: f.comment?.stringValue || "",
         createdAt: f.createdAt?.timestampValue || "",
         updatedAt: f.updatedAt?.timestampValue || "",
+        hidden: Boolean(f.hidden?.booleanValue),
         mine: Boolean(uid && f.uid?.stringValue === uid),
       };
     });
@@ -97,24 +98,21 @@ const firestoreReviews = {
     const user = currentUser();
     if (!user) throw new Error("Connectez-vous pour publier un avis.");
     // L'identifiant du document (compte + livre) garantit un seul avis par compte et par livre.
-    const docId = encodeURIComponent(`${user.uid}__${key}`);
+    // La date de publication est fixée par le serveur (REQUEST_TIME), pas par le navigateur.
     try {
-      await firestore.request(`${firestore.base()}/reviews?documentId=${docId}`, {
-        method: "POST",
-        body: JSON.stringify({
-          fields: {
-            uid: { stringValue: user.uid },
-            bookKey: { stringValue: key },
-            title: { stringValue: book.title.slice(0, 300) },
-            rating: { integerValue: String(review.rating) },
-            name: { stringValue: review.name },
-            comment: { stringValue: review.comment },
-            createdAt: { timestampValue: review.createdAt },
-          },
-        }),
-      });
+      await firestore.commit([{
+        update: {
+          name: firestore.docName(`reviews/${user.uid}__${key}`),
+          fields: toFirestore({
+            uid: user.uid, bookKey: key, title: book.title.slice(0, 300),
+            rating: review.rating, name: review.name, comment: review.comment,
+          }),
+        },
+        currentDocument: { exists: false },
+        updateTransforms: [{ fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" }],
+      }]);
     } catch (err) {
-      if (err.status === 409) throw new Error("Vous avez déjà donné votre avis sur ce livre.");
+      if (err.status === 409 || err.status === 400) throw new Error("Vous avez déjà donné votre avis sur ce livre.");
       throw err;
     }
   },
@@ -124,17 +122,15 @@ const firestoreReviews = {
     return `${firestore.base()}/${id.split("/").map(p => encodeURIComponent(decodeURIComponent(p))).join("/")}`;
   },
   async update(key, review, changes) {
-    const mask = ["rating", "comment", "updatedAt"].map(f => `updateMask.fieldPaths=${f}`).join("&");
-    await firestore.request(`${this.docUrl(review)}?${mask}`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        fields: {
-          rating: { integerValue: String(changes.rating) },
-          comment: { stringValue: changes.comment },
-          updatedAt: { timestampValue: changes.updatedAt },
-        },
-      }),
-    });
+    await firestore.commit([{
+      update: {
+        name: review.path,
+        fields: toFirestore({ rating: changes.rating, comment: changes.comment }),
+      },
+      updateMask: { fieldPaths: ["rating", "comment"] },
+      currentDocument: { exists: true },
+      updateTransforms: [{ fieldPath: "updatedAt", setToServerValue: "REQUEST_TIME" }],
+    }]);
   },
   async remove(key, review) {
     await firestore.request(this.docUrl(review), { method: "DELETE" });
@@ -259,8 +255,11 @@ async function loadReviews(book, container) {
   }
   if (!document.body.contains(body)) return;
   reviews.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  // Avis masqués par la modération : visibles seulement par leur auteur et les modérateurs.
+  reviews = reviews.filter(r => !r.hidden || r.mine || isAdminCached());
+  const counted = reviews.filter(r => !r.hidden);
 
-  const avg = reviews.length ? reviews.reduce((n, r) => n + r.rating, 0) / reviews.length : 0;
+  const avg = counted.length ? counted.reduce((n, r) => n + r.rating, 0) / counted.length : 0;
   const mine = reviews.find(r => r.mine);
 
   let formArea;
@@ -272,6 +271,13 @@ async function loadReviews(book, container) {
         <button type="button" class="buy-btn" data-auth="login">Se connecter</button>
         <button type="button" class="link-btn" data-auth="signup">Créer un compte</button>
       </div>`;
+  } else if (!currentUser().emailVerified) {
+    formArea = `<div class="review-login">
+        <p>Pour publier un avis, confirmez d'abord votre adresse e-mail grâce au lien reçu à l'inscription.</p>
+        <button type="button" class="more-btn" data-verify="resend">Renvoyer l'e-mail de confirmation</button>
+        <button type="button" class="link-btn" data-verify="check">J'ai confirmé mon adresse</button>
+        <p class="form-msg small" hidden></p>
+      </div>`;
   } else if (mine) {
     formArea = `<p class="muted small">Vous avez déjà donné votre avis sur ce livre. Vous pouvez le modifier ci-dessous.</p>`;
   } else {
@@ -281,9 +287,9 @@ async function loadReviews(book, container) {
   body.innerHTML = `
     ${error ? `<p class="error">${esc(error)}</p>` : ""}
     <div class="reviews-summary">
-      ${reviews.length
+      ${counted.length
         ? `${starsHtml(avg)} <strong>${avg.toFixed(1).replace(".", ",")}</strong>
-           <span class="muted">/ 5 · ${reviews.length} avis</span>`
+           <span class="muted">/ 5 · ${counted.length} avis</span>`
         : `<span class="muted">Aucun avis pour l'instant. Soyez le premier à donner le vôtre.</span>`}
     </div>
     ${formArea}
@@ -295,13 +301,43 @@ async function loadReviews(book, container) {
             ${profileLink(r.uid, r.name)}
             ${r.mine && reviewStore.shared ? `<span class="badge">Vous</span>` : ""}
             ${reviewDateHtml(r)}
+            ${r.hidden ? `<span class="badge">${r.mine ? "Masqué par la modération" : "Masqué"}</span>` : ""}
             ${r.mine ? `<button type="button" class="link-btn" data-edit-review="${i}">Modifier</button>
                         <button type="button" class="link-btn danger" data-delete-review="${i}">Supprimer</button>` : ""}
+            ${!r.mine && reviewStore.shared && currentUser() ? `<button type="button" class="link-btn subtle" data-report-review="${i}">Signaler</button>` : ""}
+            ${!r.mine && isAdminCached() ? `<button type="button" class="link-btn" data-mod-hide="${i}">${r.hidden ? "Réafficher" : "Masquer"}</button>` : ""}
           </div>
           ${r.comment ? `<p>${esc(r.comment)}</p>` : ""}
         </li>`).join("")}
     </ul>`;
 
+  body.querySelectorAll("[data-report-review]").forEach(btn => btn.addEventListener("click", () => {
+    openReportForm(btn.closest("li"), { ...reviews[Number(btn.dataset.reportReview)], title: book.title });
+  }));
+  body.querySelectorAll("[data-mod-hide]").forEach(btn => btn.addEventListener("click", async () => {
+    const r = reviews[Number(btn.dataset.modHide)];
+    btn.disabled = true;
+    try { await setReviewHidden(reviewDocId(r), !r.hidden); loadReviews(book, container); }
+    catch (err) { btn.textContent = err.message; }
+  }));
+  body.querySelectorAll("[data-verify]").forEach(btn => btn.addEventListener("click", async () => {
+    const msg = body.querySelector(".review-login .form-msg");
+    const user = currentUser();
+    try {
+      if (btn.dataset.verify === "resend") {
+        await user.sendEmailVerification();
+        msg.textContent = "E-mail envoyé. Pensez à regarder dans vos courriers indésirables.";
+      } else {
+        await user.reload();
+        await user.getIdToken(true);  // le jeton doit refléter la vérification pour la base de données
+        if (currentUser().emailVerified) return loadReviews(book, container);
+        msg.textContent = "Votre adresse n'est pas encore confirmée. Cliquez sur le lien reçu par e-mail, puis réessayez.";
+      }
+    } catch (err) {
+      msg.textContent = authErrorMessage(err);
+    }
+    msg.hidden = false;
+  }));
   body.querySelectorAll("[data-edit-review]").forEach(btn => btn.addEventListener("click", () => {
     const review = reviews[Number(btn.dataset.editReview)];
     openReviewEditor(btn.closest("li"), review,
