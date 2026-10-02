@@ -55,30 +55,8 @@ const localReviews = {
 
 /* ---------- Stockage partagé (Cloud Firestore) --------------------------- */
 
-const firestore = {
-  base() {
-    return `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
-  },
-  apiKey() {
-    return FIREBASE_API_KEY || GOOGLE_API_KEY;
-  },
-  async request(url, options = {}) {
-    const headers = { "Content-Type": "application/json" };
-    const token = await getIdToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const sep = url.includes("?") ? "&" : "?";
-    const res = await fetch(`${url}${sep}key=${this.apiKey()}`, { ...options, headers });
-    if (!res.ok) {
-      const status = res.status;
-      throw new Error(status === 403
-        ? "Action refusée. Vérifiez que vous êtes connecté, puis réessayez."
-        : status === 409
-          ? "Vous avez déjà donné votre avis sur ce livre."
-          : `Le service des avis ne répond pas (erreur ${status}). Réessayez plus tard.`);
-    }
-    return res.status === 204 ? null : res.json();
-  },
-  async query(field, value) {
+// Avis d'un livre (bookKey) ou d'un lecteur (uid).
+firestore.query = async function query(field, value) {
     const rows = await this.request(`${this.base()}:runQuery`, {
       method: "POST",
       body: JSON.stringify({
@@ -105,7 +83,6 @@ const firestore = {
         mine: Boolean(uid && f.uid?.stringValue === uid),
       };
     });
-  },
 };
 
 const firestoreReviews = {
@@ -121,20 +98,25 @@ const firestoreReviews = {
     if (!user) throw new Error("Connectez-vous pour publier un avis.");
     // L'identifiant du document (compte + livre) garantit un seul avis par compte et par livre.
     const docId = encodeURIComponent(`${user.uid}__${key}`);
-    await firestore.request(`${firestore.base()}/reviews?documentId=${docId}`, {
-      method: "POST",
-      body: JSON.stringify({
-        fields: {
-          uid: { stringValue: user.uid },
-          bookKey: { stringValue: key },
-          title: { stringValue: book.title.slice(0, 300) },
-          rating: { integerValue: String(review.rating) },
-          name: { stringValue: review.name },
-          comment: { stringValue: review.comment },
-          createdAt: { timestampValue: review.createdAt },
-        },
-      }),
-    });
+    try {
+      await firestore.request(`${firestore.base()}/reviews?documentId=${docId}`, {
+        method: "POST",
+        body: JSON.stringify({
+          fields: {
+            uid: { stringValue: user.uid },
+            bookKey: { stringValue: key },
+            title: { stringValue: book.title.slice(0, 300) },
+            rating: { integerValue: String(review.rating) },
+            name: { stringValue: review.name },
+            comment: { stringValue: review.comment },
+            createdAt: { timestampValue: review.createdAt },
+          },
+        }),
+      });
+    } catch (err) {
+      if (err.status === 409) throw new Error("Vous avez déjà donné votre avis sur ce livre.");
+      throw err;
+    }
   },
   // review.path = "projects/…/documents/reviews/<id>"
   docUrl(review) {

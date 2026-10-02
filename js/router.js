@@ -30,6 +30,10 @@ function route() {
       return viewReaders(arg);
     case "lecteur":
       return viewReader(arg);
+    case "bibliotheque":
+      return viewLibrary(arg);
+    case "liste":
+      return viewPublicList(arg);
     case "genre": {
       const genre = GENRES.find(g => g.id === arg);
       if (!genre) return viewNotFound();

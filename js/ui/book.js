@@ -5,6 +5,7 @@
  * ========================================================================= */
 
 const bookDialog = document.getElementById("book-dialog");
+let currentBook = null;   // livre affiché dans la fiche
 
 function openBook(id) {
   const book = bookCache.get(id);
@@ -24,6 +25,7 @@ function openBook(id) {
       <div class="detail-body">
         <h2>${esc(book.title)}</h2>
         <p class="book-authors">${book.authors.map(a => `<a href="${authorLink(a)}" data-close>${esc(a)}</a>`).join(", ") || "Auteur inconnu"}</p>
+        ${libraryControlsHtml()}
         <dl class="meta">${meta.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>
         ${book.categories.length ? `<p class="cats">${book.categories.map(c => `<span>${esc(c)}</span>`).join("")}</p>` : ""}
         ${book.description ? `<div class="desc">${esc(book.description)}</div>` : ""}
@@ -36,6 +38,9 @@ function openBook(id) {
       </div>
     </div>
     ${reviewsSectionHtml()}`;
+  currentBook = book;
   bookDialog.showModal();
+  renderLibraryControls(book);
+  readingHistory.add(book);
   loadReviews(book, document.getElementById("reviews"));
 }

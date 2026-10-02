@@ -25,6 +25,7 @@ function parseProfile(doc) {
     name: f.name?.stringValue || "Lecteur",
     createdAt: f.createdAt?.timestampValue || "",
     photoURL: f.photoURL?.stringValue || "",
+    showLibrary: Boolean(f.showLibrary?.booleanValue),
   };
 }
 
@@ -230,6 +231,8 @@ async function viewReader(uid) {
       </ul>
     </section>` : ""}
 
+    <div id="public-library"></div>
+
     <section class="account-card">
       <h2>Notes et commentaires</h2>
       ${reviews.length
@@ -244,6 +247,31 @@ async function viewReader(uid) {
             </li>`).join("")}</ul>`
         : `<p class="muted">${isMe ? "Vous n'avez pas encore donné d'avis." : "Ce lecteur n'a pas encore donné d'avis."}</p>`}
     </section>`;
+  renderPublicLibrary(uid, profile);
+}
+
+// Bibliothèque et listes publiques d'un lecteur (si il a choisi de les montrer).
+async function renderPublicLibrary(uid, profile) {
+  const box = document.getElementById("public-library");
+  if (!box) return;
+  const [entries, lists] = await Promise.all([
+    profile && profile.showLibrary ? firestore.list(`users/${uid}/library`).catch(() => []) : [],
+    firestore.runQuery({
+      from: [{ collectionId: "lists" }],
+      where: { fieldFilter: { field: { fieldPath: "public" }, op: "EQUAL", value: { booleanValue: true } } },
+      limit: 50,
+    }, `users/${uid}`).catch(() => []),
+  ]);
+  if (!document.body.contains(box)) return;
+  const shelf = (label, status) => {
+    const items = entries.filter(e => e.status === status);
+    if (!items.length) return "";
+    return `<section class="account-card"><h2>${label} <span class="muted small">· ${items.length}</span></h2>
+      <div class="shelf">${items.slice(0, 20).map(e => bookCardHtml(bookFromSnapshot(e.id, e))).join("")}</div></section>`;
+  };
+  box.innerHTML = shelf("En cours de lecture", "reading") + shelf("Livres lus", "read") + shelf("À lire", "to-read")
+    + (lists.length ? `<section class="account-card"><h2>Listes publiques</h2><ul class="public-lists">${lists.map(l =>
+      `<li><a href="#/liste/${enc(uid)}/${enc(l.id)}">${esc(l.name)}</a> <span class="muted small">· ${(l.items || []).length} livres</span></li>`).join("")}</ul></section>` : "");
 }
 
 // Le profil public est créé ou mis à jour à chaque connexion.

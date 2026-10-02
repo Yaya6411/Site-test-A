@@ -274,6 +274,11 @@ function viewAccount() {
       </section>
 
       <section class="account-card">
+        <h2>Confidentialité</h2>
+        <label class="check-row"><input type="checkbox" id="show-library">
+          Afficher ma bibliothèque (Lus, En cours, À lire) sur mon profil public</label>
+        <p class="muted small">Vos listes restent privées sauf celles que vous rendez publiques. L'historique n'est jamais partagé.</p>
+        <hr>
         <h2>Sécurité</h2>
         ${isPassword
           ? `<p class="muted small">Recevez un lien par e-mail pour choisir un nouveau mot de passe.</p>
@@ -358,6 +363,9 @@ function viewAccount() {
     try {
       const mine = await firestoreReviews.listByUser(user.uid);
       for (const r of mine) await firestoreReviews.remove(r.bookKey, r);
+      // Bibliothèque et listes du compte.
+      await Promise.all([...library.entries.keys()].map(k => firestore.remove(`users/${user.uid}/library/${k}`)));
+      await Promise.all([...library.lists.keys()].map(id => firestore.remove(`users/${user.uid}/lists/${id}`)));
       await deleteProfile(user.uid);
       await user.delete();
       location.hash = "#/";
@@ -369,6 +377,18 @@ function viewAccount() {
       securityMsg.textContent = err.code ? authErrorMessage(err) : err.message;
       securityMsg.hidden = false;
     }
+  });
+
+  // Réglage « bibliothèque publique », enregistré dans le profil public.
+  const showLib = document.getElementById("show-library");
+  getProfile(user.uid).then(p => { if (p) showLib.checked = p.showLibrary; });
+  showLib.addEventListener("change", () => {
+    firestore.patch(`users/${user.uid}`, { showLibrary: showLib.checked }).catch(err => {
+      showLib.checked = !showLib.checked;
+      securityMsg.className = "security-msg small error";
+      securityMsg.textContent = err.message;
+      securityMsg.hidden = false;
+    });
   });
 
   renderMyReviews(user);

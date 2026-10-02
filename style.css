@@ -567,3 +567,44 @@ a.reviewer:hover { color: var(--accent); }
 .sk-line.short { width: 60%; }
 @keyframes sk-pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .sk-cover, .sk-line { animation: none; } }
+
+/* ---------- Bibliothèque personnelle ---------- */
+
+.lib-controls { margin: 12px 0; display: grid; gap: 10px; }
+.lib-status { display: flex; flex-wrap: wrap; gap: 8px; }
+.lib-btn {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 999px; padding: 6px 12px; cursor: pointer; font-weight: 600; font-size: .88rem;
+}
+.lib-btn:hover { border-color: var(--accent); }
+.lib-btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.lib-btn.fav.on { background: #c0392b; border-color: #c0392b; color: #fff; }
+.lib-lists summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: .9rem; }
+.lib-lists-body { display: grid; gap: 6px; padding: 8px 0 0 4px; }
+.lib-list-row { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+.lib-new-list { display: flex; gap: 8px; flex-wrap: wrap; }
+.lib-new-list input { flex: 1 1 180px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.lib-new-list .more-btn { padding: 6px 14px; }
+
+.lib-badges { position: absolute; top: 8px; right: 8px; z-index: 1; display: flex; gap: 4px; pointer-events: none; }
+.lib-badge {
+  font-size: .68rem; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+  background: rgba(20, 20, 20, .78); color: #fff; letter-spacing: .02em;
+}
+.lib-badge.s-read { background: #1e8449; }
+.lib-badge.s-reading { background: #2471a3; }
+.lib-badge.fav { background: #c0392b; }
+
+.lib-stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.lib-stats > div { flex: 1 1 120px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.lib-stats dt { font-size: .8rem; color: var(--muted); }
+.lib-stats dd { margin: 2px 0 0; font-size: 1.5rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tag .count { font-size: .75rem; opacity: .75; margin-left: 2px; }
+.list-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.list-head h2 { margin: 0; }
+.list-actions { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.list-card .book-grid { margin-top: 12px; }
+.rename-form { display: inline-flex; gap: 8px; }
+.rename-form input { padding: 4px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.check-row { display: flex; gap: 8px; align-items: flex-start; font-size: .92rem; }
+.public-lists { margin: 0; padding-left: 18px; display: grid; gap: 4px; }

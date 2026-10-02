@@ -43,3 +43,12 @@ function storeUrl(store, book) {
 }
 
 const loadingHtml = `<div class="loading"><span class="spinner"></span> Chargement…</div>`;
+
+// Met à jour la description de la page (partage de liens, moteurs de recherche).
+function setPageMeta(description) {
+  let tag = document.querySelector('meta[name="description"]');
+  if (!tag) { tag = document.createElement("meta"); tag.name = "description"; document.head.appendChild(tag); }
+  tag.content = description;
+  const og = document.querySelector('meta[property="og:description"]');
+  if (og) og.content = description;
+}

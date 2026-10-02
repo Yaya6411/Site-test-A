@@ -59,8 +59,9 @@ function coverFailed(img) {
 function bookCardHtml(book) {
   const store = getStore();
   return `
-    <article class="book-card">
+    <article class="book-card" data-id="${esc(book.id)}" data-key="${esc(reviewKey(book))}">
       ${book.isNew ? `<span class="new-badge">Nouveau</span>` : ""}
+      <span class="lib-badges">${typeof libraryBadgeHtml === "function" ? libraryBadgeHtml(book) : ""}</span>
       <button class="book-open" data-book="${esc(book.id)}" aria-label="Voir les détails de ${esc(book.title)}">
         <div class="cover">${coverHtml(book)}</div>
         <h3 class="book-title">${esc(book.title)}</h3>
