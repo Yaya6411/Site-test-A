@@ -11,6 +11,36 @@
 const OL_FIELDS = "key,title,subtitle,author_name,first_publish_year,isbn,cover_i,subject,publisher,number_of_pages_median,language," +
   "editions,editions.key,editions.title,editions.subtitle,editions.isbn,editions.cover_i,editions.publisher,editions.publish_date";
 
+// Variantes ciblées pour les genres dont les sujets sont mal indexés selon les catalogues.
+// Elles ne sont essayées que si la requête principale ne produit aucun livre exploitable.
+const GENRE_QUERY_FALLBACKS = {
+  "litterature-francaise": ["roman français", "littérature française"],
+  fantasy: ["fantasy fiction", "roman fantasy français"],
+  "science-fiction": ["science fiction", "roman de science-fiction"],
+  manga: ["manga français", "manga traduit"],
+  shonen: ["shonen manga", "manga shonen"],
+  shojo: ["shojo manga", "manga shojo"],
+  seinen: ["seinen manga", "manga seinen"],
+  "light-novel": ["light novel français", "light novels"],
+  bd: ["bande dessinée", "BD franco-belge"],
+  comics: ["comics super-héros", "comics français"],
+  "roman-graphique": ["roman graphique", "graphic novel français"],
+  manhwa: ["manhwa français", "webtoon imprimé"],
+  albums: ["album jeunesse français", "livre illustré enfant"],
+  jeunesse: ["roman jeunesse français", "fiction jeunesse"],
+  "young-adult": ["roman young adult français", "littérature ado"],
+  "documentaires-jeunesse": ["documentaire jeunesse", "documentaires pour enfants"],
+};
+
+function queryCandidates(query, primary, plain) {
+  const candidates = [primary, plain];
+  if (query.type === "genre" || query.type === "recent") {
+    const id = query.value && query.value.id;
+    for (const term of GENRE_QUERY_FALLBACKS[id] || []) candidates.push(term);
+  }
+  return [...new Set(candidates.filter(Boolean).map(s => s.trim()).filter(Boolean))];
+}
+
 const sources = {
   google: {
     label: "Google Books",
@@ -50,16 +80,21 @@ const sources = {
       return res.json();
     },
     async fetch(query, page, sort) {
-      let data = await this.request(this.buildQuery(query), page, sort);
-      if (!(data.items || []).length && query.type !== "all") {
-        data = await this.request(this.plainQuery(query), page, sort);
+      const candidates = queryCandidates(query, this.buildQuery(query), this.plainQuery(query));
+      let data = { items: [], totalItems: 0 };
+      let raw = [];
+      let books = [];
+      for (const q of candidates) {
+        data = await this.request(q, page, sort);
+        raw = data.items || [];
+        books = raw
+          .filter(it => !it.volumeInfo.language || it.volumeInfo.language === "fr")
+          .filter(it => !isLowContent(it.volumeInfo.title, it.volumeInfo.subtitle, it.volumeInfo.categories))
+          .map(normalizeGoogle);
+        // Ne multiplier les appels que lorsque la requête ne fournit aucun livre exploitable.
+        if (books.length || query.type === "all" || query.type === "isbn" || query.type === "title" || query.type === "author") break;
       }
-      const raw = data.items || [];
-      const books = raw
-        .filter(it => !it.volumeInfo.language || it.volumeInfo.language === "fr")
-        .filter(it => !isLowContent(it.volumeInfo.title, it.volumeInfo.subtitle, it.volumeInfo.categories))
-        .map(normalizeGoogle);
-      // Google renvoie parfois moins de résultats que demandé : on continue tant qu'il en reste.
+      // Le total reflète la dernière requête tentée ; hasMore s'appuie sur les éléments réellement reçus.
       return { books, total: data.totalItems || 0, hasMore: raw.length > 0 && page * PAGE_SIZE + raw.length < (data.totalItems || 0) };
     },
   },
@@ -67,30 +102,41 @@ const sources = {
   openlibrary: {
     label: "Open Library",
     async fetch(query, page, sort) {
+      const { type, value } = query;
       const params = new URLSearchParams({
         language: "fre",
         limit: PAGE_SIZE,
         page: page + 1,
-        // "editions" renvoie l'édition qui correspond au filtre de langue (la version française).
+        // Demande les données d'édition pour mieux identifier la version française.
         fields: OL_FIELDS,
       });
-      const { type, value } = query;
-      if (type === "genre") params.set("subject", value.openlibrary);
-      else if (type === "author") params.set("author", value);
-      else if (type === "title") params.set("title", value);
-      else if (type === "isbn") params.set("isbn", value.replace(/[^0-9Xx]/g, ""));
-      else if (type === "recent") value ? params.set("subject", value.openlibrary) : params.set("q", "language:fre");
-      else params.set("q", value);
-      if (sort === "new") params.set("sort", "new");
-
-      const res = await fetch(`https://openlibrary.org/search.json?${params}`);
-      if (!res.ok) throw new Error(`Open Library : erreur ${res.status}`);
-      const data = await res.json();
-      const books = (data.docs || [])
-        // Langue française confirmée : édition française trouvée ou œuvre marquée « fre ».
-        .filter(doc => (doc.editions && doc.editions.docs && doc.editions.docs.length) || (doc.language || []).includes("fre"))
-        .filter(doc => !isLowContent(doc.title, doc.subtitle, doc.subject))
-        .map(normalizeOpenLibrary);
+      const setQuery = (candidate, first = false) => {
+        params.delete("subject"); params.delete("author"); params.delete("title"); params.delete("isbn"); params.delete("q");
+        if (type === "author") params.set("author", value);
+        else if (type === "title") params.set("title", value);
+        else if (type === "isbn") params.set("isbn", value.replace(/[^0-9Xx]/g, ""));
+        else if (type === "genre" || (type === "recent" && value)) params.set("subject", candidate);
+        else params.set("q", candidate);
+      };
+      let candidates;
+      if (type === "genre") candidates = queryCandidates(query, value.openlibrary, value.name);
+      else if (type === "recent" && value) candidates = queryCandidates(query, value.openlibrary, value.name);
+      else candidates = [type === "recent" ? "language:fre" : value];
+      let data = { docs: [], numFound: 0 };
+      let books = [];
+      for (let i = 0; i < candidates.length; i++) {
+        setQuery(candidates[i], i === 0 && (type === "genre" || (type === "recent" && value)));
+        if (sort === "new") params.set("sort", "new");
+        const res = await fetch(`https://openlibrary.org/search.json?${params}`);
+        if (!res.ok) throw new Error(`Open Library : erreur ${res.status}`);
+        data = await res.json();
+        books = (data.docs || [])
+          // On conserve uniquement les notices avec indice d'édition française ou langue française.
+          .filter(doc => (doc.editions && doc.editions.docs && doc.editions.docs.length) || (doc.language || []).includes("fre"))
+          .filter(doc => !isLowContent(doc.title, doc.subtitle, doc.subject))
+          .map(normalizeOpenLibrary);
+        if (books.length || !["genre", "recent"].includes(type)) break;
+      }
       return { books, total: data.numFound || 0, hasMore: (page + 1) * PAGE_SIZE < (data.numFound || 0) };
     },
   },

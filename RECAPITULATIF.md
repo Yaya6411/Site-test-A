@@ -193,6 +193,10 @@ Feuille de route (document « Feuille de route Biblio FR ») :
 
 Une demande d'onglet « Tendances / plus vendus » a été abandonnée au profit du classement par avis et des Nouveautés.
 
+## 8 bis. Intégration v12 (12/10)
+
+Travail d'une autre IA intégré après vérification : variantes de recherche de secours par genre (`GENRE_QUERY_FALLBACKS`), refonte visuelle (accueil illustré, `assets/`, polices, bouton de thème). Défauts corrigés à l'intégration : thème sombre de l'appareil, badge « Nouveau », sélecteur tronqué sur mobile, lisibilité des cartes d'univers. Détails : `dossier-ia/11-integration-v12.md`.
+
 ## 9. Limites connues et points d'attention
 
 - **À faire par le propriétaire** : publier la dernière version de `firestore.rules` dans la console, puis faire vérifier les règles (comptes de test temporaires) ; créer `admins/{uid}` pour chaque modérateur.

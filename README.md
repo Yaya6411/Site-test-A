@@ -144,3 +144,10 @@ n'importe quel champ (par exemple `role = "admin"`). Le lien **Modération** app
    autorisés** de Firebase Authentication.
 4. Remplacer `https://yaya6411.github.io/Site-test-A/` dans `index.html` (balises `canonical` et `og:`),
    `robots.txt` et `sitemap.xml`.
+
+
+---
+
+## Reprise par une autre IA
+
+Avant toute modification, lire [`COMMENCER-ICI-POUR-UNE-AUTRE-IA.md`](COMMENCER-ICI-POUR-UNE-AUTRE-IA.md), puis les documents dans `dossier-ia/`.

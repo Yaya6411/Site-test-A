@@ -54,3 +54,32 @@ function setPageMeta(description) {
   const og = document.querySelector('meta[property="og:description"]');
   if (og) og.content = description;
 }
+
+/* ---------- Thème ------------------------------------------------------- */
+(function initThemeToggle() {
+  const btn = document.getElementById("theme-btn");
+  if (!btn || !document.documentElement) return;
+  const saved = prefs.get("theme", "");
+  if (saved === "dark" || saved === "light") document.documentElement.dataset.theme = saved;
+  const update = () => {
+    const dark = document.documentElement.dataset.theme === "dark";
+    btn.textContent = dark ? "☀" : "☾";
+    btn.setAttribute("aria-label", dark ? "Passer au thème clair" : "Passer au thème sombre");
+    btn.title = dark ? "Thème clair" : "Thème sombre";
+  };
+  update();
+  // Sans choix enregistré, le site suit le réglage clair/sombre de l'appareil.
+  if (window.matchMedia) {
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => {
+      if (prefs.get("theme", "")) return;
+      document.documentElement.dataset.theme = e.matches ? "dark" : "light";
+      update();
+    });
+  }
+  btn.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    prefs.set("theme", next);
+    update();
+  });
+})();

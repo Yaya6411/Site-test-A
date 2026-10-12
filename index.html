@@ -23,12 +23,21 @@
   {"@context":"https://schema.org","@type":"WebSite","name":"Biblio FR","url":"https://yaya6411.github.io/Site-test-A/","inLanguage":"fr","description":"Catalogue des livres disponibles en français, avec avis de lecteurs et liens vers les librairies en ligne."}
   </script>
   <link rel="stylesheet" href="style.css">
+  <!-- Thème appliqué avant l'affichage : choix enregistré, sinon réglage de l'appareil. -->
+  <script>
+    (function () {
+      var t = "";
+      try { t = localStorage.getItem("bibliofr.theme") || ""; } catch (e) {}
+      if (t !== "dark" && t !== "light") t = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#/" data-skip>Aller au contenu</a>
   <header class="site-header">
     <div class="wrap hdr">
-      <a href="#/" class="logo" aria-label="Biblio FR, accueil"><img src="icon.svg" alt="" width="28" height="28"><span>Biblio<span>FR</span></span></a>
+      <a href="#/" class="logo" aria-label="Biblio FR, accueil"><img src="assets/brand-book.svg" alt="" width="48" height="48"><span class="logo-text"><strong>Biblio<span>FR</span></strong><small>Lire. Découvrir. Partager.</small></span></a>
       <form id="search-form" class="search" role="search">
         <select id="search-mode" aria-label="Type de recherche">
           <option value="all">Tout</option>
@@ -36,21 +45,21 @@
           <option value="author">Auteur</option>
           <option value="isbn">ISBN</option>
         </select>
-        <input id="search-input" type="search" placeholder="Rechercher un livre, un manga, un auteur…" autocomplete="off" required>
+        <input id="search-input" type="search" placeholder="Rechercher un livre, un auteur, un ISBN…" autocomplete="off" required>
         <button type="submit">Rechercher</button>
       </form>
       <div class="header-actions">
-        <button id="settings-btn" class="icon-btn" title="Préférences" aria-label="Préférences">⚙️</button>
+        <button id="theme-btn" class="icon-btn theme-btn" title="Changer le thème" aria-label="Changer le thème">☼</button><button id="settings-btn" class="icon-btn" title="Préférences" aria-label="Préférences">⚙️</button>
         <span id="account-area"></span>
       </div>
       <nav class="main-nav" aria-label="Navigation principale">
-        <a href="#/genres">Genres</a>
-        <a href="#/auteurs">Auteurs</a>
-        <a href="#/classement">Classement</a>
-        <a href="#/nouveautes">Nouveautés</a>
-        <a href="#/incontournables">Incontournables</a>
-        <a href="#/lecteurs">Lecteurs</a>
-        <a href="#/bibliotheque">Ma bibliothèque</a>
+        <a href="#/genres"><span class="nav-icon" aria-hidden="true"><img src="assets/nav/genres.svg" alt=""></span><span>Genres</span></a>
+        <a href="#/auteurs"><span class="nav-icon" aria-hidden="true"><img src="assets/nav/auteurs.svg" alt=""></span><span>Auteurs</span></a>
+        <a href="#/classement"><span class="nav-icon" aria-hidden="true"><img src="assets/nav/classement.svg" alt=""></span><span>Classement</span></a>
+        <a href="#/nouveautes"><span class="nav-icon" aria-hidden="true"><img src="assets/nav/nouveautes.svg" alt=""></span><span>Nouveautés</span></a>
+        <a href="#/incontournables"><span class="nav-icon" aria-hidden="true"><img src="assets/nav/incontournables.svg" alt=""></span><span>Incontournables</span></a>
+        <a href="#/lecteurs"><span class="nav-icon" aria-hidden="true"><img src="assets/nav/lecteurs.svg" alt=""></span><span>Lecteurs</span></a>
+        <a href="#/bibliotheque"><span class="nav-icon" aria-hidden="true"><img src="assets/nav/bibliotheque.svg" alt=""></span><span>Ma bibliothèque</span></a>
         <a href="#/fil" id="feed-link" hidden>Fil d'actualité <span class="nav-badge" hidden></span></a>
       </nav>
     </div>

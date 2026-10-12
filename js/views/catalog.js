@@ -12,47 +12,83 @@ function homeAuthors() {
   return tags.flatMap(t => FEATURED_AUTHORS.filter(a => a.tag === t).slice(0, 2)).slice(0, 15);
 }
 
+const HOME_CATEGORY_CARDS = [
+  { id: "litterature", name: "Littérature", description: "Romans, classiques, poésie…", count: "14 genres", image: "assets/categories/litterature.jpg" },
+  { id: "imaginaire", name: "Imaginaire", description: "Fantasy, science-fiction, fantastique…", count: "9 genres", image: "assets/categories/imaginaire.jpg" },
+  { id: "manga-bd", name: "Mangas & BD", description: "Mangas, comics, bandes dessinées…", count: "9 genres", image: "assets/categories/mangas-bd.jpg" },
+  { id: "jeunesse", name: "Jeunesse", description: "Albums, romans, documentaires…", count: "5 genres", image: "assets/categories/jeunesse.jpg" },
+  { id: "savoirs", name: "Savoirs & essais", description: "Histoire, société, sciences, art…", count: "21 genres", image: "assets/categories/savoirs-essais.jpg" },
+  { id: "pratique", name: "Vie pratique", description: "Santé, cuisine, voyages, loisirs…", count: "12 genres", image: "assets/categories/vie-pratique.jpg" },
+];
+
+function homeCategoryHtml(card) {
+  const target = card.id === "litterature" ? "romans" :
+    card.id === "imaginaire" ? "science-fiction" :
+    card.id === "manga-bd" ? "manga" :
+    card.id === "jeunesse" ? "jeunesse" :
+    card.id === "savoirs" ? "histoire" : "cuisine";
+  return `<a class="home-category" href="#/genre/${target}">
+    <img src="${esc(card.image)}" alt="" loading="lazy">
+    <span class="home-category-shade"></span>
+    <span class="home-category-copy">
+      <strong>${esc(card.name)}</strong>
+      <small>${esc(card.description)}</small>
+      <em>${esc(card.count)} <b aria-hidden="true">→</b></em>
+    </span>
+  </a>`;
+}
+
 function viewHome() {
   document.title = "Biblio FR — le catalogue des livres en français";
+  const mustShelf = MUST_READS.flatMap(c => c.books).filter((_, i) => i % 2 === 0).slice(0, 10);
   app.innerHTML = `
-    <section class="hero">
-      <h1>Tous les livres en français, au même endroit</h1>
-      <p>Romans, mangas, BD, essais, jeunesse… Parcourez le catalogue par genre ou par auteur, puis achetez en un clic chez votre libraire en ligne préféré.</p>
+    <section class="home-hero">
+      <div class="home-hero-copy">
+        <p class="eyebrow">BIBLIO FR · CATALOGUE FRANCOPHONE</p>
+        <h1>Trouvez votre<br><span>prochaine lecture</span></h1>
+        <p class="hero-lead">Des milliers de livres en français : romans, mangas, BD, essais, jeunesse… Une communauté de lecteurs pour partager vos découvertes.</p>
+        <div class="hero-actions">
+          <a class="hero-cta primary" href="#/recherche/all/" data-home-search>⌕ <span>Rechercher un livre</span></a>
+          <a class="hero-cta secondary" href="#/genres">⌁ <span>Explorer les genres</span></a>
+        </div>
+      </div>
+      <div class="home-hero-art" aria-hidden="true">
+        <img src="assets/hero-bibliotheque-maquette.jpg" alt="">
+      </div>
     </section>
 
-    <section>
-      <div class="section-head"><h2>Genres</h2><a href="#/genres">Tous les genres →</a></div>
-      <div class="genre-grid">${HOME_GENRES.map(id => GENRES.find(g => g.id === id)).filter(Boolean).map(genreCardHtml).join("")}</div>
+    <section class="home-categories" aria-label="Explorer les univers">
+      <div class="home-category-grid">${HOME_CATEGORY_CARDS.map(homeCategoryHtml).join("")}</div>
     </section>
 
-    <section>
-      <div class="section-head"><h2>Auteurs populaires</h2><a href="#/auteurs">Tous les auteurs →</a></div>
-      <div class="author-grid">${homeAuthors().map(authorChipHtml).join("")}</div>
+    <section class="home-shelf-section">
+      <div class="section-head home-section-head"><div><span class="section-mark leaf">✦</span><div><h2>Sorties récentes</h2><p>Les dernières parutions en français</p></div></div><a href="#/nouveautes">Voir toutes les nouveautés →</a></div>
+      <div class="shelf home-shelf" id="shelf-recent">${shelfSkeleton(8)}</div>
     </section>
 
-    <section>
-      <div class="section-head"><h2>Les incontournables</h2><a href="#/incontournables">Voir la sélection →</a></div>
-      <div class="tag-filter">${MUST_READS.map(c => `<a class="tag" href="#/incontournables/${slug(c.name)}">${esc(c.name)}</a>`).join("")}</div>
-    </section>
-
-    <section>
-      <div class="section-head"><h2>🆕 Sorties récentes</h2><a href="#/nouveautes">Toutes les nouveautés →</a></div>
-      <div class="shelf" id="shelf-recent">${shelfSkeleton()}</div>
-    </section>
-
-    <section>
-      <div class="section-head"><h2>🎌 Mangas</h2><a href="#/genre/manga">Voir plus →</a></div>
-      <div class="shelf" id="shelf-manga">${shelfSkeleton()}</div>
-    </section>
-
-    <section>
-      <div class="section-head"><h2>📖 Romans</h2><a href="#/genre/romans">Voir plus →</a></div>
-      <div class="shelf" id="shelf-romans">${shelfSkeleton()}</div>
+    <section class="home-shelf-section">
+      <div class="section-head home-section-head"><div><span class="section-mark star">★</span><div><h2>Incontournables</h2><p>Des livres de référence à découvrir ou redécouvrir</p></div></div><a href="#/incontournables">Voir tous les incontournables →</a></div>
+      <div class="shelf home-shelf" id="shelf-must">${shelfSkeleton(8)}</div>
     </section>`;
 
   fillRecentShelf("shelf-recent");
-  fillShelf("shelf-manga", { type: "genre", value: GENRES.find(g => g.id === "manga") });
-  fillShelf("shelf-romans", { type: "genre", value: GENRES.find(g => g.id === "romans") });
+  fillMustShelf("shelf-must", mustShelf);
+}
+
+async function fillMustShelf(elId, entries) {
+  const el = document.getElementById(elId);
+  try {
+    const books = [];
+    for (const [title, author] of entries) {
+      const book = await findMustRead(title, author);
+      if (book) books.push(book);
+      if (books.length >= 10) break;
+    }
+    if (!document.body.contains(el)) return;
+    el.innerHTML = books.map(bookCardHtml).join("") || `<p class="muted">La sélection se prépare…</p>`;
+  } catch (err) {
+    if (document.body.contains(el)) el.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  }
 }
 
 async function fillShelf(elId, query) {

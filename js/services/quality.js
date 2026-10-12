@@ -151,7 +151,8 @@ function relevance(book, query) {
     const genre = value;
     if (genre) {
       const cats = norm(book.categories.join(" "));
-      const keywords = tokens(`${genre.google} ${genre.name} ${genre.openlibrary}`).filter(w => w.length > 3);
+      const fallbackTerms = (typeof GENRE_QUERY_FALLBACKS !== "undefined" && GENRE_QUERY_FALLBACKS[genre.id]) || [];
+      const keywords = tokens(`${genre.google} ${genre.name} ${genre.openlibrary} ${fallbackTerms.join(" ")}`).filter(w => w.length > 3);
       if (keywords.some(k => cats.includes(k) || titleNorm.includes(k))) score += 2;
       if (isFictionGenre(genre) && book.categories.length && !FICTION_CATEGORIES.test(cats)) score -= 4;
     }

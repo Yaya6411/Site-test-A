@@ -27,6 +27,9 @@ Les scripts utilisent le chemin absolu `/home/user/Site-test-A` et Chromium inst
 | `t18.mjs` | v1.4 : nombre de requêtes, cache, mutualisation, parallélisme. |
 | `t19.mjs` | v2.0 : BnF (lecture SRU, fusion) et repli si la BnF est refusée. |
 | `t20.mjs` | v2.0 : en-tête, accessibilité, à propos, lien partagé, suivre, fil d'actualité, pastille. |
+| `t21-catalogue.js`, `t22-comparaison-catalogue.js` | (v11, autre IA) variantes de recherche de secours par genre, sans réseau : `node dossier-ia/outils-de-test/t22-comparaison-catalogue.js`. |
+| `t23-visuel-v12.mjs` | Captures de l'accueil (ordinateur, mobile, sombre), genres, résultats mobile ; fichiers locaux manquants et erreurs. |
+| `t25-couleurs-themes.mjs` | Couleurs réellement affichées en thème clair, sombre de l'appareil et sombre choisi. |
 | `verify4.py` | Vérification **sur la vraie base** des règles (31 tests) avec deux comptes temporaires, nettoyage inclus. Exécution : `python3 verify4.py`. |
 | `gen-img.mjs` | Génère les PNG (icônes, image de partage) à partir de `icon.svg`. |
 
