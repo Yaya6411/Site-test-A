@@ -10,13 +10,13 @@ Les nouveautés étaient cherchées en direct à chaque visite. Cela consommait 
 - **Clé Google** : le secret GitHub `GOOGLE_BOOKS_KEY` s'il existe. Sinon, le robot utilise la clé de `data.js` en envoyant l'adresse du site comme origine (en-tête `Referer`), puisque cette clé est limitée à `https://yaya6411.github.io/*`.
 - **Sorties** :
   - `data/nouveautes.json` : liste « Tout » et une liste par genre de `RECENT_GENRES`, 60 livres au maximum chacune. Les livres de la semaine passent devant, et les anciens restent tant qu'ils sont récents (année en cours ou précédente). Si moins de 20 livres sont trouvés (sources en panne), l'ancien fichier est conservé.
-  - `data/incontournables.json` : fiche de chaque incontournable, avec la même correspondance que `findMustRead`. Une fiche trouvée est gardée 90 jours ; les livres non trouvés sont retentés chaque semaine.
+  - `data/incontournables.json` : fiche de chaque incontournable, avec la même correspondance que `findMustRead`. Une fiche trouvée est gardée 90 jours ; les livres non trouvés sont retentés chaque semaine. Cette étape est limitée à 6 minutes (4 recherches en parallèle, 20 s maximum par requête) ; ce qui reste est repris la semaine suivante.
 - Le workflow **commit** les fichiers sur `claude/youthful-archimedes-zcrfu4`, puis demande une republication GitHub Pages (`POST /pages/builds`).
 - **Coût** : environ 60 requêtes Google pour les nouveautés. Pour les incontournables, environ 260 au premier passage, puis seulement les livres manquants.
 
 ## Côté site (`js/views/discover.js`)
 - `loadWeeklyRecent()` lit `data/nouveautes.json`. Le fichier est ignoré s'il a plus de 21 jours.
-- L'étagère de l'accueil et la première page des Nouveautés utilisent la sélection si elle compte au moins 4 livres.
+- L'étagère de l'accueil et la première page des Nouveautés utilisent la sélection si elle compte au moins 8 livres.
 - « Charger plus » poursuit en direct, sans doublons (identifiant et `workKey`).
 - `findMustRead()` regarde d'abord `data/incontournables.json`, puis le cache local, puis le direct.
 

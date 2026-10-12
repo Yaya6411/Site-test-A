@@ -164,6 +164,7 @@ function recentOnly(books) {
  * fichier data/nouveautes.json). Plus rapide et sans quota Google ; si le
  * fichier manque ou date de plus de 3 semaines, on cherche en direct. */
 const WEEKLY_MAX_AGE_DAYS = 21;
+const WEEKLY_MIN_BOOKS = 8; // en dessous, la sélection est trop maigre : recherche en direct
 let weeklyPromise = null;
 
 function loadWeeklyRecent() {
@@ -187,7 +188,7 @@ const weeklyList = (data, genreId) => (data ? recentOnly((genreId ? (data.genres
 async function fillRecentShelf(elId) {
   const el = document.getElementById(elId);
   const weekly = weeklyList(await loadWeeklyRecent(), null);
-  if (weekly.length >= 4) {
+  if (weekly.length >= WEEKLY_MIN_BOOKS) {
     if (document.body.contains(el)) el.innerHTML = weekly.slice(0, 12).map(bookCardHtml).join("");
     return;
   }
@@ -238,7 +239,7 @@ function viewRecent(genreId) {
       const data = await loadWeeklyRecent();
       if (!document.body.contains(grid)) return;
       const weekly = weeklyList(data, genre && genre.id);
-      if (weekly.length >= 4) {
+      if (weekly.length >= WEEKLY_MIN_BOOKS) {
         weekly.forEach(b => { seen.add(b.id); seenWorks.add(workKey(b)); });
         grid.insertAdjacentHTML("beforeend", weekly.map(bookCardHtml).join(""));
         const day = new Date(data.generatedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });

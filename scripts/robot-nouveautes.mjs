@@ -23,6 +23,9 @@ const PAGES_PER_GENRE = 3;   // 3 × 40 résultats demandés par source et par g
 const MAX_PER_LIST = 60;     // livres gardés par liste
 const RECENT_YEARS = 2;      // année en cours et année précédente
 const MIN_BOOKS_TO_SAVE = 20; // en dessous, on garde l'ancien fichier (sources en panne)
+const REQUEST_TIMEOUT_MS = 20000;  // une source qui ne répond pas est abandonnée
+const MUST_BUDGET_MS = 6 * 60 * 1000; // temps maximal consacré aux incontournables (la suite la semaine suivante)
+const MUST_PARALLEL = 4;
 
 // La BnF répond en XML : le navigateur a DOMParser, Node non.
 let DOMParser = null;
@@ -45,7 +48,7 @@ async function robotFetch(url, opts = {}) {
     else headers.Referer = SITE;
   }
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(u, { ...opts, headers });
+    const res = await fetch(u, { ...opts, headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
     // Google répond parfois 503 / 429 : on réessaie calmement.
     if ((res.status === 503 || res.status === 429 || res.status === 500) && attempt < 3) {
       await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
@@ -170,11 +173,21 @@ const MUST_READS = vm.runInContext("MUST_READS", context);
 const prevMust = (() => { try { return JSON.parse(fs.readFileSync(MUST_OUT, "utf8")).books || {}; } catch { return {}; } })();
 const must = {};
 let mustFound = 0, mustSearched = 0;
+const queue = [];
 for (const cat of MUST_READS) {
   for (const [title, author] of cat.books) {
     const key = reviewKey({ title, authors: [author] });
     const old = prevMust[key];
-    if (old && Date.now() - Date.parse(old.at) < MUST_KEEP_DAYS * 864e5) { must[key] = old; continue; }
+    if (old) must[key] = old;
+    if (!old || !(Date.now() - Date.parse(old.at) < MUST_KEEP_DAYS * 864e5)) queue.push({ title, author, key });
+  }
+}
+// Les livres jamais trouvés passent d'abord, puis les fiches les plus anciennes.
+queue.sort((a, b) => (must[a.key] ? 1 : 0) - (must[b.key] ? 1 : 0));
+const mustDeadline = Date.now() + MUST_BUDGET_MS;
+async function mustWorker() {
+  while (queue.length && Date.now() < mustDeadline) {
+    const { title, author, key } = queue.shift();
     vm.runInContext("for (const k in sourceDownUntil) delete sourceDownUntil[k]", context);
     mustSearched++;
     try {
@@ -183,13 +196,11 @@ for (const cat of MUST_READS) {
       const book = books.find(b => reviewKey(b) === key)
         || books.find(b => reviewKey(b).split("|")[1] === surname && reviewKey(b).startsWith(key.split("|")[0]));
       if (book) { must[key] = { ...slim(book), at: today }; mustFound++; }
-      else if (old) must[key] = old;
-    } catch (err) {
-      if (old) must[key] = old;
-    }
-    await new Promise(r => setTimeout(r, 300));
+    } catch { /* fiche précédente conservée */ }
   }
 }
+await Promise.all(Array.from({ length: MUST_PARALLEL }, mustWorker));
+if (queue.length) console.log(`Temps écoulé : ${queue.length} incontournables seront cherchés au prochain passage.`);
 const mustTotal = MUST_READS.reduce((n, c) => n + c.books.length, 0);
 fs.mkdirSync(path.dirname(MUST_OUT), { recursive: true });
 fs.writeFileSync(MUST_OUT, JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), books: must }) + "\n");
