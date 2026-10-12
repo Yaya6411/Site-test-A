@@ -30,6 +30,7 @@ Les scripts utilisent le chemin absolu `/home/user/Site-test-A` et Chromium inst
 | `t21-catalogue.js`, `t22-comparaison-catalogue.js` | (v11, autre IA) variantes de recherche de secours par genre, sans réseau : `node dossier-ia/outils-de-test/t22-comparaison-catalogue.js`. |
 | `t23-visuel-v12.mjs` | Captures de l'accueil (ordinateur, mobile, sombre), genres, résultats mobile ; fichiers locaux manquants et erreurs. |
 | `t25-couleurs-themes.mjs` | Couleurs réellement affichées en thème clair, sombre de l'appareil et sombre choisi. |
+| `t26-robot-nouveautes.mjs` | Usage des fichiers du robot, repli en direct (fichier absent ou trop ancien), mobile. Site servi en HTTP (voir l'en-tête du fichier). |
 | `verify4.py` | Vérification **sur la vraie base** des règles (31 tests) avec deux comptes temporaires, nettoyage inclus. Exécution : `python3 verify4.py`. |
 | `gen-img.mjs` | Génère les PNG (icônes, image de partage) à partir de `icon.svg`. |
 

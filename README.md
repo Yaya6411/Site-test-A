@@ -5,11 +5,11 @@ romans, mangas, bandes dessinées, essais, jeunesse, etc.
 
 ## Fonctionnalités
 
-- **Navigation par genre** : 70 genres regroupés en 6 familles (Littérature, Imaginaire, Mangas & BD — dont shōnen, shōjo, seinen —, Jeunesse, Savoirs & essais, Vie pratique).
-- **Navigation par auteur** : plus de 330 auteurs mis en avant, filtrables par catégorie, + recherche de n'importe quel auteur.
+- **Navigation par genre** : 74 genres regroupés en 6 familles (Littérature, Imaginaire, Mangas & BD — dont shōnen, shōjo, seinen —, Jeunesse, Savoirs & essais, Vie pratique).
+- **Navigation par auteur** : plus de 570 auteurs mis en avant, filtrables par catégorie, + recherche de n'importe quel auteur.
 - **Couvertures** : image de la source, puis Open Library et Amazon via l'ISBN ; à défaut, une couverture est dessinée avec le titre.
-- **Incontournables** : 133 livres de référence en 9 catégories (classiques, mangas, BD, essais…).
-- **Classement** des livres les plus commentés et **Nouveautés** (parutions récentes).
+- **Incontournables** : 258 livres de référence en 10 catégories (classiques, mangas, BD, essais…).
+- **Classement** des livres les plus commentés et **Nouveautés** (parutions récentes, liste mise à jour chaque lundi par un robot GitHub Actions — voir `dossier-ia/12-robot-nouveautes.md`).
 - **Filtre** des agendas, calendriers, coloriages, carnets vierges et livres de grilles.
 - **Recherche** globale, par titre, par auteur ou par ISBN : sans accents, tolérante aux fautes de frappe,
   autocomplétion, filtres combinables (année, auteur, genre), « Vouliez-vous dire » quand rien n'est trouvé.

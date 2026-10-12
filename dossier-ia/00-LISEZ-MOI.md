@@ -25,6 +25,7 @@ Site web gratuit qui répertorie les livres disponibles en français (romans, ma
 | `07-points-ouverts.md` | Ce qui reste à faire, les limites connues et les pistes d'évolution. |
 | `08` à `10` | Travail d'une autre IA (v11/v12) : variantes de recherche par genre, comparaison simulée, transmission. |
 | `11-integration-v12.md` | Intégration de la v12 : vérifications, défauts corrigés (thème sombre, badge, mobile), points non démontrés. |
+| `12-robot-nouveautes.md` | Robot hebdomadaire (GitHub Actions) des nouveautés et des incontournables, listes allongées. |
 | `firestore.rules` | Copie des règles de sécurité actuellement publiées. |
 | `outils-de-test/` | Scripts de test (Playwright avec API simulées, vérification des règles sur la vraie base). |
 

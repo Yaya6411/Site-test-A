@@ -30,7 +30,7 @@ Depuis la feuille de route (versions 1.1 à 2.0), le JavaScript est découpé en
 |---|---|
 | `index.html` | Squelette : en-tête (logo, recherche, ⚙️ + compte, menu défilant), `<main id="app">`, dialogues (fiche livre, connexion, préférences), métadonnées SEO/Open Graph, scripts. |
 | `style.css` | Mise en forme, thème clair/sombre, responsive (≥ 375 px sans défilement horizontal), focus visibles, réduction des animations. |
-| `data.js` | Configuration (`GOOGLE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_API_KEY`) et données : `GENRE_GROUPS`/`GENRES` (70), `HOME_GENRES`, `FEATURED_AUTHORS` (333), `MUST_READS` (133), `STORES` (7). |
+| `data.js` | Configuration (`GOOGLE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_API_KEY`) et données : `GENRE_GROUPS`/`GENRES` (74), `HOME_GENRES`, `FEATURED_AUTHORS` (572), `MUST_READS` (258), `STORES` (7). |
 | `js/core/util.js` | `PAGE_SIZE`, `app`, `bookCache`, `prefs`, `getSource`, `getStore`, `esc`, `enc`, `authorLink`, `storeUrl`, `loadingHtml`, `setPageMeta`, `DEFAULT_DESCRIPTION`. |
 | `js/services/cache.js` | Cache persistant `localStorage` à durée de vie par type (`CACHE_TTL`), `dedupedFetch` (requêtes identiques mutualisées), `limited` (4 requêtes max en parallèle). |
 | `js/services/sources.js` | `sources.google`, `sources.openlibrary`, `sources.bnf` (expérimental, auto-détecté), normalisation, `isLowContent`, `coverCandidates`, `fetchBookById` (liens partagés). |
@@ -41,7 +41,8 @@ Depuis la feuille de route (versions 1.1 à 2.0), le JavaScript est découpé en
 | `js/ui/autocomplete.js` | Liste de suggestions accessible (combobox, flèches, Entrée, Échap). |
 | `js/ui/book.js` | Fiche livre en modale, `currentBook`, partage (`shareBook`, `#/livre/<id>`). |
 | `js/views/catalog.js` | Accueil, genres, auteurs, résultats (filtres combinables, aucun résultat → suggestions). |
-| `js/views/discover.js` | Classement, Nouveautés, Incontournables. |
+| `js/views/discover.js` | Classement, Nouveautés, Incontournables (lisent d'abord `data/nouveautes.json` et `data/incontournables.json`). |
+| `scripts/robot-nouveautes.mjs` + `.github/workflows/nouveautes.yml` | Robot hebdomadaire (lundi) qui prépare ces deux fichiers. |
 | `js/views/about.js` | Page « À propos » (sources, avis, données personnelles, accessibilité). |
 | `js/features/auth.js` | Firebase Auth, fenêtre connexion/inscription, page « Mon compte ». |
 | `js/features/reviews.js` | Avis : lecture, création (`commit`, date serveur), modification, suppression, signalement, e-mail vérifié. |
@@ -66,7 +67,7 @@ L'ordre des `<script>` dans `index.html` est significatif (chaque fichier utilis
 | `#/livre/<id>` | Lien partagé : la fiche s'ouvre sur l'accueil (`g-…` Google, `ol-…` Open Library) |
 | `#/classement` | Livres les plus commentés |
 | `#/nouveautes[/<genreId>]` | Sorties récentes |
-| `#/incontournables[/<slug>]` | 133 livres de référence |
+| `#/incontournables[/<slug>]` | 258 livres de référence |
 | `#/bibliotheque[/<en-cours|a-lire|lus|favoris|listes|historique>]` | Ma bibliothèque |
 | `#/liste/<uid>/<listId>` | Liste publique partagée |
 | `#/lecteurs[/<texte>]`, `#/lecteur/<uid>` | Recherche de lecteurs, profil public |

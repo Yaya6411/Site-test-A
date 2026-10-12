@@ -160,8 +160,37 @@ function recentOnly(books) {
     .sort((a, b) => Number(b.year) - Number(a.year));
 }
 
+/* Liste préparée chaque semaine par le robot (scripts/robot-nouveautes.mjs,
+ * fichier data/nouveautes.json). Plus rapide et sans quota Google ; si le
+ * fichier manque ou date de plus de 3 semaines, on cherche en direct. */
+const WEEKLY_MAX_AGE_DAYS = 21;
+let weeklyPromise = null;
+
+function loadWeeklyRecent() {
+  if (!weeklyPromise) {
+    weeklyPromise = fetch("data/nouveautes.json", { cache: "no-cache" })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!data || !Array.isArray(data.all) || !(Date.now() - Date.parse(data.generatedAt) < WEEKLY_MAX_AGE_DAYS * 864e5)) return null;
+        const register = b => { bookCache.set(b.id, b); (b.altIds || []).forEach(id => bookCache.set(id, b)); };
+        data.all.forEach(register);
+        Object.values(data.genres || {}).forEach(list => list.forEach(register));
+        return data;
+      })
+      .catch(() => null);
+  }
+  return weeklyPromise;
+}
+
+const weeklyList = (data, genreId) => (data ? recentOnly((genreId ? (data.genres || {})[genreId] : data.all) || []) : []);
+
 async function fillRecentShelf(elId) {
   const el = document.getElementById(elId);
+  const weekly = weeklyList(await loadWeeklyRecent(), null);
+  if (weekly.length >= 4) {
+    if (document.body.contains(el)) el.innerHTML = weekly.slice(0, 12).map(bookCardHtml).join("");
+    return;
+  }
   try {
     const { books } = await searchBooks({ type: "recent", value: null }, 0, "new");
     if (!document.body.contains(el)) return;
@@ -194,13 +223,32 @@ function viewRecent(genreId) {
   const status = document.getElementById("results-status");
   const moreBtn = document.getElementById("more-btn");
   const seen = new Set();
+  const seenWorks = new Set();
   let page = 0;
+  let weeklyChecked = false;
 
   // Les sources mélangent anciennes et nouvelles éditions : on parcourt
   // quelques pages de suite jusqu'à trouver assez de parutions récentes.
   async function load() {
     moreBtn.hidden = true;
     status.innerHTML = loadingHtml;
+    // Premier affichage : la sélection de la semaine ; « Charger plus » cherche ensuite en direct.
+    if (!weeklyChecked) {
+      weeklyChecked = true;
+      const data = await loadWeeklyRecent();
+      if (!document.body.contains(grid)) return;
+      const weekly = weeklyList(data, genre && genre.id);
+      if (weekly.length >= 4) {
+        weekly.forEach(b => { seen.add(b.id); seenWorks.add(workKey(b)); });
+        grid.insertAdjacentHTML("beforeend", weekly.map(bookCardHtml).join(""));
+        const day = new Date(data.generatedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+        document.getElementById("results-count").textContent =
+          `Sélection de la semaine, mise à jour le ${day} · sources : ${(data.sources || []).join(" + ")}`;
+        status.innerHTML = "";
+        moreBtn.hidden = false;
+        return;
+      }
+    }
     let added = 0;
     let hasMore = true;
     try {
@@ -209,8 +257,8 @@ function viewRecent(genreId) {
         if (!document.body.contains(grid)) return;
         hasMore = result.hasMore;
         page++;
-        const fresh = recentOnly(result.books).filter(b => !seen.has(b.id));
-        fresh.forEach(b => seen.add(b.id));
+        const fresh = recentOnly(result.books).filter(b => !seen.has(b.id) && !seenWorks.has(workKey(b)));
+        fresh.forEach(b => { seen.add(b.id); seenWorks.add(workKey(b)); });
         grid.insertAdjacentHTML("beforeend", fresh.map(bookCardHtml).join(""));
         added += fresh.length;
         document.getElementById("results-count").textContent = `source : ${result.sourceLabel}`;
@@ -239,8 +287,26 @@ function mustCache() {
   try { return JSON.parse(localStorage.getItem("bibliofr.mustReads") || "{}"); } catch { return {}; }
 }
 
+// Fiches préparées chaque semaine par le robot (data/incontournables.json).
+let mustFilePromise = null;
+function loadMustFile() {
+  if (!mustFilePromise) {
+    mustFilePromise = fetch("data/incontournables.json", { cache: "no-cache" })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => (data && data.books) || {})
+      .catch(() => ({}));
+  }
+  return mustFilePromise;
+}
+
 async function findMustRead(title, author) {
   const key = reviewKey({ title, authors: [author] });
+  const prepared = (await loadMustFile())[key];
+  if (prepared) {
+    bookCache.set(prepared.id, prepared);
+    (prepared.altIds || []).forEach(id => bookCache.set(id, prepared));
+    return prepared;
+  }
   const cached = mustCache()[key];
   if (cached && Date.now() - cached.at < MUST_CACHE_DAYS * 864e5) {
     if (cached.book) bookCache.set(cached.book.id, cached.book);

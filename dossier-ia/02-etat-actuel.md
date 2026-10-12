@@ -5,14 +5,14 @@
 | Page (URL) | Ce qu'on y trouve |
 |---|---|
 | Accueil `#/` | Présentation, genres principaux, auteurs, incontournables, étagères « Sorties récentes », « Mangas », « Romans ». |
-| Genres `#/genres`, `#/genre/<id>` | 70 genres en 6 familles (Littérature, Imaginaire, Mangas & BD, Jeunesse, Savoirs & essais, Vie pratique). |
-| Auteurs `#/auteurs`, `#/auteur/<nom>` | 333 auteurs en 15 catégories, filtre par catégorie, recherche libre avec autocomplétion. |
+| Genres `#/genres`, `#/genre/<id>` | 74 genres en 6 familles (Littérature, Imaginaire, Mangas & BD, Jeunesse, Savoirs & essais, Vie pratique). |
+| Auteurs `#/auteurs`, `#/auteur/<nom>` | 572 auteurs en 14 catégories, filtre par catégorie, recherche libre avec autocomplétion. |
 | Recherche `#/recherche/<all|title|author|isbn>/<texte>` | Résultats classés par pertinence ou par date, filtres Année / Auteur / Genre, « Charger plus », suggestions si aucun résultat. |
 | Fiche livre (fenêtre) | Couverture, auteurs, éditeur, date, pages, ISBN, catégories, résumé, boutons d'achat (7 librairies), partage, statut de lecture et favori, ajout à une liste, avis des lecteurs. |
 | Lien partagé `#/livre/<id>` | Ouvre la fiche d'un livre (identifiants `g-…` Google, `ol-…` Open Library). |
 | Classement `#/classement` | Livres ayant reçu le plus d'avis (7 jours, 30 jours, depuis toujours). |
-| Nouveautés `#/nouveautes[/<genre>]` | Parutions en français de l'année en cours et de la précédente, badge « Nouveau ». |
-| Incontournables `#/incontournables[/<catégorie>]` | 133 livres de référence en 9 catégories, fiches retrouvées automatiquement. |
+| Nouveautés `#/nouveautes[/<genre>]` | Parutions en français de l'année en cours et de la précédente, badge « Nouveau ». Première page : sélection hebdomadaire du robot (`data/nouveautes.json`) ; « Charger plus » et repli en direct si le fichier manque ou a plus de 21 jours. |
+| Incontournables `#/incontournables[/<catégorie>]` | 258 livres de référence en 10 catégories ; fiches préparées chaque semaine par le robot (`data/incontournables.json`), sinon retrouvées en direct. |
 | Lecteurs `#/lecteurs`, `#/lecteur/<uid>` | Recherche par pseudo, profils publics : avatar, statistiques, répartition des notes, avis, bibliothèque et listes publiques, abonnés / abonnements, bouton « Suivre ». |
 | Ma bibliothèque `#/bibliotheque/<onglet>` | En cours, À lire, Lus, Favoris, Mes listes, Historique ; statistiques (lus, lus dans l'année, pages, avis, note moyenne). |
 | Liste partagée `#/liste/<uid>/<listId>` | Liste publique d'un lecteur. |

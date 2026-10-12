@@ -1,0 +1,62 @@
+# Robot hebdomadaire : met à jour data/nouveautes.json (page « Nouveautés » et étagère de l'accueil).
+# Il tourne chaque lundi matin, et peut être lancé à la main depuis l'onglet Actions
+# (« Mise à jour des nouveautés » → « Run workflow »).
+# Important : GitHub ne lance les tâches planifiées que depuis la branche par défaut du dépôt.
+name: Mise à jour des nouveautés
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"   # lundi 4 h 17 UTC (6 h 17 à Paris l'été)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: nouveautes
+  cancel-in-progress: false
+
+jobs:
+  maj:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/youthful-archimedes-zcrfu4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Lecteur XML pour la BnF
+        run: npm install --no-save --no-package-lock @xmldom/xmldom@0.8.15
+
+      - name: Chercher les nouveautés
+        run: node scripts/robot-nouveautes.mjs
+        env:
+          GOOGLE_BOOKS_KEY: ${{ secrets.GOOGLE_BOOKS_KEY }}
+
+      - name: Enregistrer la liste
+        id: commit
+        run: |
+          git config user.name "Robot des nouveautés"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/nouveautes.json
+          if git diff --cached --quiet; then
+            echo "Aucun changement."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Nouveautés : mise à jour hebdomadaire"
+            git push origin HEAD:claude/youthful-archimedes-zcrfu4
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Republier le site
+        if: steps.commit.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          curl -sS -X POST -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pages/builds"

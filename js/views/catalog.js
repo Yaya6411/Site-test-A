@@ -13,8 +13,8 @@ function homeAuthors() {
 }
 
 const HOME_CATEGORY_CARDS = [
-  { id: "litterature", name: "Littérature", description: "Romans, classiques, poésie…", count: "14 genres", image: "assets/categories/litterature.jpg" },
-  { id: "imaginaire", name: "Imaginaire", description: "Fantasy, science-fiction, fantastique…", count: "9 genres", image: "assets/categories/imaginaire.jpg" },
+  { id: "litterature", name: "Littérature", description: "Romans, classiques, poésie…", count: "16 genres", image: "assets/categories/litterature.jpg" },
+  { id: "imaginaire", name: "Imaginaire", description: "Fantasy, science-fiction, fantastique…", count: "11 genres", image: "assets/categories/imaginaire.jpg" },
   { id: "manga-bd", name: "Mangas & BD", description: "Mangas, comics, bandes dessinées…", count: "9 genres", image: "assets/categories/mangas-bd.jpg" },
   { id: "jeunesse", name: "Jeunesse", description: "Albums, romans, documentaires…", count: "5 genres", image: "assets/categories/jeunesse.jpg" },
   { id: "savoirs", name: "Savoirs & essais", description: "Histoire, société, sciences, art…", count: "21 genres", image: "assets/categories/savoirs-essais.jpg" },
