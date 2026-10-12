@@ -10,7 +10,7 @@ Les nouveautés étaient cherchées en direct à chaque visite. Cela consommait 
 - **Clé Google** : le secret GitHub `GOOGLE_BOOKS_KEY` s'il existe. Sinon, le robot utilise la clé de `data.js` en envoyant l'adresse du site comme origine (en-tête `Referer`), puisque cette clé est limitée à `https://yaya6411.github.io/*`.
 - **Sorties** :
   - `data/nouveautes.json` : liste « Tout » et une liste par genre de `RECENT_GENRES`, 60 livres au maximum chacune. Les livres de la semaine passent devant, et les anciens restent tant qu'ils sont récents (année en cours ou précédente). Si moins de 20 livres sont trouvés (sources en panne), l'ancien fichier est conservé.
-  - `data/incontournables.json` : fiche de chaque incontournable, avec la même correspondance que `findMustRead`. Une fiche trouvée est gardée 90 jours ; les livres non trouvés sont retentés chaque semaine. Cette étape est limitée à 6 minutes (4 recherches en parallèle, 20 s maximum par requête) ; ce qui reste est repris la semaine suivante.
+  - `data/incontournables.json` : fiche de chaque incontournable, avec la même correspondance que `findMustRead`. Une fiche trouvée est gardée 90 jours ; les livres non trouvés sont retentés chaque semaine. Cette étape est limitée à 10 minutes (4 recherches en parallèle, 20 s maximum par requête) ; ce qui reste est repris la semaine suivante.
 - Le workflow **commit** les fichiers sur `claude/youthful-archimedes-zcrfu4`, puis demande une republication GitHub Pages (`POST /pages/builds`).
 - **Coût** : environ 60 requêtes Google pour les nouveautés. Pour les incontournables, environ 260 au premier passage, puis seulement les livres manquants.
 
@@ -33,4 +33,4 @@ GitHub ne lance les tâches **planifiées** que depuis la **branche par défaut*
 - Robot avec API simulées (Google avec erreurs 503, Open Library, BnF XML) : 3 sources lues, agendas exclus, années anciennes exclues, nouvelle tentative après une 503, clé du secret prioritaire, conservation des dates d'ajout d'une semaine à l'autre.
 - `t26-robot-nouveautes.mjs` : fichier présent, sur ordinateur et à 375 px ; fichier absent ; fichier trop ancien. Aucune erreur JavaScript et aucun défilement horizontal.
 - `t14`, `t20` et `tq.js` passent toujours.
-- **Non démontré** : le premier passage réel du robot sur GitHub (à lancer à la main après le changement de branche par défaut).
+- **Passages réels du 12/10** : 306 nouveautés trouvées (Google Books, Open Library, BnF) ; 81 incontournables préparés sur 258 au premier enregistrement, le reste est complété chaque semaine. Genres encore maigres dans la sélection : manga (4), BD (1), young adult (1) ; pour eux, le site cherche en direct (seuil de 8 livres).

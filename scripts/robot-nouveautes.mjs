@@ -24,7 +24,7 @@ const MAX_PER_LIST = 60;     // livres gardés par liste
 const RECENT_YEARS = 2;      // année en cours et année précédente
 const MIN_BOOKS_TO_SAVE = 20; // en dessous, on garde l'ancien fichier (sources en panne)
 const REQUEST_TIMEOUT_MS = 20000;  // une source qui ne répond pas est abandonnée
-const MUST_BUDGET_MS = 6 * 60 * 1000; // temps maximal consacré aux incontournables (la suite la semaine suivante)
+const MUST_BUDGET_MS = 10 * 60 * 1000; // temps maximal consacré aux incontournables (la suite la semaine suivante)
 const MUST_PARALLEL = 4;
 
 // La BnF répond en XML : le navigateur a DOMParser, Node non.
