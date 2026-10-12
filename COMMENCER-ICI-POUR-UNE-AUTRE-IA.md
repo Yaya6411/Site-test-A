@@ -25,6 +25,6 @@ Ce dossier contient le projet Biblio FR dans son état de travail **v12 — cata
 
 ## État de validation honnête
 
-Les scripts de test de catalogue inclus vérifient des scénarios simulés. Ils ne démontrent pas à eux seuls que Google Books, Open Library ou la BnF renvoient effectivement davantage de livres en conditions réelles. Les appels réels aux API, la comparaison avant/après sur un échantillon réel, Playwright/Chromium et le contrôle visuel mobile restent à réaliser dans un environnement qui le permet.
+La v12 a été intégrée et publiée le 12/10 (voir `dossier-ia/11-integration-v12.md`). Les contrôles suivants ont alors été exécutés : `node --check` sur tout le JavaScript, tests de catalogue (`t21`, `t22` 8/8, `tq.js`), tests Playwright/Chromium existants sans erreur JavaScript, contrôle mobile à 375 px sans défilement horizontal, contrôle visuel (accueil ordinateur et mobile, thème sombre, genres) et vérification de la publication GitHub Pages. Les défauts trouvés (thème sombre de l'appareil, badge « Nouveau », sélecteur tronqué sur mobile, voile des cartes) ont été corrigés.
 
-Ne pas présenter les tests simulés comme une validation en production. Ne pas prétendre que la version est prête à publier tant que les contrôles manquants n'ont pas été exécutés.
+Reste **non démontré en conditions réelles** : l'effet des variantes de recherche par genre sur les vraies API (Google Books répondait « 503 » depuis l'environnement de développement, comparaison non concluante), le fonctionnement de la BnF (CORS), la publication d'un avis avec un compte vérifié, le signalement et la modération réels. Ne pas présenter les tests simulés comme une preuve de ces points.
