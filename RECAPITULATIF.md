@@ -43,6 +43,8 @@ Depuis la feuille de route (versions 1.1 à 2.0), le JavaScript est découpé en
 | `js/views/catalog.js` | Accueil, genres, auteurs, résultats (filtres combinables, aucun résultat → suggestions). |
 | `js/views/legal.js` | Mentions légales `#/mentions-legales`, confidentialité `#/confidentialite`, contact `#/contact` (collection `messages`). |
 | `js/views/discover.js` | Classement, Nouveautés, Incontournables (lisent d'abord `data/nouveautes.json` et `data/incontournables.json`). |
+| `scripts/robot-classement.mjs` + `.github/workflows/classement.yml` | Classement préparé chaque matin (`data/classement.json`). |
+| `.github/workflows/tests.yml` | Tests automatiques à chaque modification. |
 | `scripts/robot-nouveautes.mjs` + `.github/workflows/nouveautes.yml` | Robot hebdomadaire (lundi) qui prépare ces deux fichiers, puis les pages `livres/*.html` et `sitemap.xml` via `scripts/pages-livres.mjs`. |
 | `js/views/about.js` | Page « À propos » (sources, avis, données personnelles, accessibilité). |
 | `js/features/auth.js` | Firebase Auth, fenêtre connexion/inscription, page « Mon compte ». |

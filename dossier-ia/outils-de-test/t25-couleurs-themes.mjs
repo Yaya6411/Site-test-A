@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium' });
 for (const [label, opts, theme] of [['système sombre',{colorScheme:'dark'},null],['bouton sombre',{colorScheme:'light'},'dark'],['clair',{colorScheme:'light'},null]]) {
   const p = await b.newPage({viewport:{width:1440,height:900}, ...opts});
   await p.route('**/vendor/*.js', r=>r.fulfill({contentType:'text/javascript',body:''}));

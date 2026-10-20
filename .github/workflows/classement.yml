@@ -1,0 +1,59 @@
+# Robot quotidien : prépare data/classement.json (page « Classement ») à partir des avis publics.
+# Il tourne chaque matin, et peut être lancé à la main depuis l'onglet Actions
+# (« Mise à jour du classement » → « Run workflow »).
+name: Mise à jour du classement
+
+on:
+  schedule:
+    - cron: "41 3 * * *"   # chaque jour à 3 h 41 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: robots-donnees   # même groupe que le robot des nouveautés : jamais deux enregistrements en même temps
+  cancel-in-progress: false
+
+jobs:
+  classement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: claude/youthful-archimedes-zcrfu4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Calculer le classement
+        run: node scripts/robot-classement.mjs
+        env:
+          GOOGLE_BOOKS_KEY: ${{ secrets.GOOGLE_BOOKS_KEY }}
+
+      - name: Enregistrer le classement
+        id: commit
+        run: |
+          git config user.name "Robot du classement"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A data/classement.json
+          if git diff --cached --quiet; then
+            echo "Aucun changement."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "Classement : mise à jour quotidienne"
+            git pull --rebase origin claude/youthful-archimedes-zcrfu4
+            git push origin HEAD:claude/youthful-archimedes-zcrfu4
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Republier le site
+        if: steps.commit.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          curl -sS -X POST -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pages/builds"

@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import { installCommon, installFirestore, installBooks } from './fsmock.mjs';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium' });
 const p = await b.newPage({viewport:{width:1100,height:1300}}); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
 const enc=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k, typeof v==='number'?{integerValue:String(v)}:typeof v==='boolean'?{booleanValue:v}:{stringValue:v}]));
 const docs={

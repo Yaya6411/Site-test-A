@@ -63,6 +63,25 @@ async function findBookForRanking(entry) {
   }
 }
 
+/* Classement préparé chaque matin par le robot (scripts/robot-classement.mjs,
+ * fichier data/classement.json) : la page ne relit plus tous les avis.
+ * Fichier absent ou de plus de 8 jours → calcul en direct, comme avant. */
+const RANKING_MAX_AGE_DAYS = 8;
+let rankingFilePromise = null;
+function loadRankingFile() {
+  if (!rankingFilePromise) {
+    rankingFilePromise = fetch("data/classement.json", { cache: "no-cache" })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!data || !data.periods || !(Date.now() - Date.parse(data.generatedAt) < RANKING_MAX_AGE_DAYS * 864e5)) return null;
+        Object.values(data.books || {}).forEach(b => bookCache.set(b.id, b));
+        return data;
+      })
+      .catch(() => null);
+  }
+  return rankingFilePromise;
+}
+
 function rankingRowHtml(entry, rank, book) {
   const authorPart = entry.bookKey.split("|")[1] || "";
   const fakeBook = { id: "", title: entry.title, authors: book ? book.authors : [authorPart], covers: [] };
@@ -118,8 +137,10 @@ function viewRanking() {
     box.innerHTML = loadingHtml;
     const period = RANKING_PERIODS.find(p => p.id === periodId) || RANKING_PERIODS[0];
     let ranked;
+    let prepared = null;
     try {
-      ranked = rankBooks(await reviewsSince(period.days));
+      prepared = await loadRankingFile();
+      ranked = prepared && prepared.periods[period.id] ? prepared.periods[period.id] : rankBooks(await reviewsSince(period.days));
     } catch (err) {
       if (current === token) box.innerHTML = `<p class="error">${esc(err.message)}</p>`;
       return;
@@ -133,7 +154,10 @@ function viewRanking() {
         </div>`;
       return;
     }
-    box.innerHTML = `<ol class="ranking">${ranked.map((e, i) => rankingRowHtml(e, i + 1, null)).join("")}</ol>`;
+    const preparedBook = e => (prepared && prepared.books && prepared.books[e.bookKey]) || null;
+    box.innerHTML = `<ol class="ranking">${ranked.map((e, i) => rankingRowHtml(e, i + 1, preparedBook(e))).join("")}</ol>
+      ${prepared ? `<p class="muted small">Classement mis à jour chaque matin (dernière mise à jour : ${esc(new Date(prepared.generatedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }))}).</p>` : ""}`;
+    if (prepared) return;
 
     // Couvertures et auteurs des 10 premiers, complétés ensuite.
     ranked.slice(0, 10).forEach(async (entry, i) => {

@@ -5,7 +5,7 @@
 const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
-const root = path.resolve(__dirname, "../..");
+const root = process.env.SITE_DIR || path.resolve(__dirname, "../..");
 const source = fs.readFileSync(path.join(root, "js/services/sources.js"), "utf8");
 const cases = [
   { id: "litterature-francaise", name: "Littérature française", google: "french literature", openlibrary: "french literature", expected: "roman français", title: "Roman français de test" },

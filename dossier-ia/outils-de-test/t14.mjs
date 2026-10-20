@@ -1,5 +1,5 @@
 import { chromium } from 'playwright';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium' });
 const p = await b.newPage({viewport:{width:1100,height:1200}}); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
 await p.route('**/vendor/*.js', r=>r.fulfill({contentType:'text/javascript',body:''}));
 await p.route('**/*.jpg*', r=>r.fulfill({status:404}));

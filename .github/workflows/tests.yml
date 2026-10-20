@@ -1,0 +1,44 @@
+# Tests automatiques : lancés à chaque modification du site (et à la main depuis l'onglet Actions).
+# En cas d'échec, GitHub prévient le propriétaire par e-mail ; la cause est dans le journal du passage.
+# Les modifications faites par les robots (nouveautés, classement) ne déclenchent pas ces tests.
+name: Tests
+
+on:
+  push:
+    branches: [claude/youthful-archimedes-zcrfu4]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Installer Playwright et Chromium
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw" && cd "$RUNNER_TEMP/pw"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund playwright@1.56.1
+          npx playwright install --with-deps chromium
+          echo "CHROMIUM=$(node -e "console.log(require('playwright').chromium.executablePath())")" >> "$GITHUB_ENV"
+          echo "NODE_PATH_PW=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
+
+      # Les tests ouvrent le site à l'adresse file:///home/user/Site-test-A/… (environnement de développement).
+      - name: Placer le site à l'emplacement attendu
+        run: sudo mkdir -p /home/user && sudo ln -sfn "$GITHUB_WORKSPACE" /home/user/Site-test-A
+
+      - name: Lancer les tests
+        run: bash dossier-ia/outils-de-test/lancer-tests.sh

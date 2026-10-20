@@ -14,66 +14,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
-import { fileURLToPath } from "node:url";
+import { ROOT, SITE, DOMParser, robotFetch, createSiteContext } from "./contexte-site.mjs";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = path.join(ROOT, "data", "nouveautes.json");
-const SITE = "https://yaya6411.github.io/Site-test-A/";
 const PAGES_PER_GENRE = 3;   // 3 × 40 résultats demandés par source et par genre
 const MAX_PER_LIST = 60;     // livres gardés par liste
 const RECENT_YEARS = 2;      // année en cours et année précédente
 const MIN_BOOKS_TO_SAVE = 20; // en dessous, on garde l'ancien fichier (sources en panne)
-const REQUEST_TIMEOUT_MS = 20000;  // une source qui ne répond pas est abandonnée
 const MUST_BUDGET_MS = 10 * 60 * 1000; // temps maximal consacré aux incontournables (la suite la semaine suivante)
 const MUST_PARALLEL = 4;
 
-// La BnF répond en XML : le navigateur a DOMParser, Node non.
-let DOMParser = null;
-try {
-  ({ DOMParser } = await import("@xmldom/xmldom"));
-  // Le code du site parcourt les listes de nœuds avec [...liste] : on les rend itérables.
-  const sample = new DOMParser().parseFromString("<a><b/></a>", "application/xml").getElementsByTagName("b");
-  const proto = Object.getPrototypeOf(sample);
-  if (!proto[Symbol.iterator]) proto[Symbol.iterator] = Array.prototype[Symbol.iterator];
-} catch { /* BnF ignorée */ }
-
-// Clé Google : secret GitHub GOOGLE_BOOKS_KEY si présent, sinon la clé du site
-// (limitée au site : on présente donc l'adresse du site comme origine).
-const secretKey = process.env.GOOGLE_BOOKS_KEY || "";
-async function robotFetch(url, opts = {}) {
-  let u = String(url);
-  const headers = { "User-Agent": "BiblioFR-robot-nouveautes (" + SITE + ")", ...(opts.headers || {}) };
-  if (u.startsWith("https://www.googleapis.com/")) {
-    if (secretKey) u = u.replace(/([?&]key=)[^&]*/, "$1" + encodeURIComponent(secretKey));
-    else headers.Referer = SITE;
-  }
-  for (let attempt = 0; ; attempt++) {
-    const res = await fetch(u, { ...opts, headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-    // Google répond parfois 503 / 429 : on réessaie calmement.
-    if ((res.status === 503 || res.status === 429 || res.status === 500) && attempt < 3) {
-      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
-      continue;
-    }
-    return res;
-  }
-}
-
-// Contexte qui imite le minimum d'un navigateur pour charger les scripts du site.
-const stubEl = null;
-const context = vm.createContext({
-  console, setTimeout, clearTimeout, URLSearchParams, URL, Promise, Map, Set, JSON, Math, Date,
-  fetch: robotFetch,
-  DOMParser: DOMParser || undefined,
-  document: { getElementById: () => stubEl, querySelector: () => stubEl, documentElement: null },
-  window: {},
-});
-context.window = context;
-const SCRIPTS = ["data.js", "js/core/util.js", "js/services/cache.js", "js/services/sources.js",
-  "js/services/quality.js", "js/services/search.js"];
-for (const file of SCRIPTS) {
-  vm.runInContext(fs.readFileSync(path.join(ROOT, file), "utf8"), context, { filename: file });
-}
-if (!DOMParser) vm.runInContext(`delete sources.bnf;`, context);
+const context = createSiteContext();
 
 // Mêmes genres que la page « Nouveautés » (js/views/discover.js).
 const discover = fs.readFileSync(path.join(ROOT, "js/views/discover.js"), "utf8");
@@ -335,8 +286,6 @@ if (freshCount < MIN_BOOKS_TO_SAVE && previous) {
  * ------------------------------------------------------------------------- */
 const MUST_OUT = path.join(ROOT, "data", "incontournables.json");
 const MUST_KEEP_DAYS = 90;
-const reviewsSrc = fs.readFileSync(path.join(ROOT, "js/features/reviews.js"), "utf8");
-vm.runInContext(reviewsSrc.match(/function reviewKey\(book\) \{[\s\S]*?\n\}\n/)[0], context);
 const reviewKey = vm.runInContext("reviewKey", context);
 const searchBooks = vm.runInContext("searchBooks", context);
 const MUST_READS = vm.runInContext("MUST_READS", context);
@@ -404,6 +353,57 @@ fs.mkdirSync(path.dirname(MUST_OUT), { recursive: true });
 fs.writeFileSync(MUST_OUT, JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), books: must }) + "\n");
 console.log(`data/incontournables.json écrit : ${Object.keys(must).length}/${mustTotal} fiches (${mustSearched} recherchées cette semaine, ${mustFound} trouvées).`);
 
+/* ---------- Livres des pages auteurs et genres ------------------------------
+ * Open Library seulement (pas de quota Google). Chaque semaine : tous les genres
+ * et les 80 auteurs mis en avant dont la liste est la plus ancienne ; chaque liste
+ * est gardée 60 jours, la suite est reprise la semaine suivante.
+ * ------------------------------------------------------------------------- */
+const AG_OUT = path.join(ROOT, "data", "auteurs-genres.json");
+const AUTHORS_PER_RUN = 80;
+const AG_KEEP_DAYS = 60;
+const agPrev = (() => { try { return JSON.parse(fs.readFileSync(AG_OUT, "utf8")); } catch { return { authors: {}, genres: {} }; } })();
+const ag = { version: 1, generatedAt: new Date().toISOString(), authors: { ...agPrev.authors }, genres: { ...agPrev.genres } };
+const FEATURED_AUTHORS = vm.runInContext("FEATURED_AUTHORS", context);
+const ol = vm.runInContext("sources.openlibrary", context);
+const norm = vm.runInContext("norm", context);
+const lightBook = b => ({ id: b.id, title: b.title, authors: (b.authors || []).slice(0, 3), year: b.year, covers: (b.covers || []).slice(0, 2) });
+
+async function olBooks(query, keep, max) {
+  try {
+    const { books } = await ol.fetch(query, 0, "relevance");
+    let list = vm.runInContext("dedupeWorks", context)(books.filter(keep));
+    list = vm.runInContext("rankByRelevance", context)(list, query);
+    return list.slice(0, max).map(lightBook);
+  } catch {
+    return null; // source indisponible : l'ancienne liste est gardée
+  }
+}
+const stale = entry => !entry || !(Date.now() - Date.parse(entry.at) < AG_KEEP_DAYS * 864e5);
+const agTasks = [];
+for (const genre of GENRES) {
+  agTasks.push(async () => {
+    const books = await olBooks({ type: "genre", value: genre }, b => !vm.runInContext("isGenreFalsePositive", context)(b, genre), 24);
+    if (books) ag.genres[genre.id] = { at: today, books };
+  });
+}
+const authorsByAge = [...FEATURED_AUTHORS].sort((x, y) =>
+  String((ag.authors[x.name] || {}).at || "").localeCompare(String((ag.authors[y.name] || {}).at || "")));
+for (const a of authorsByAge.filter(a => stale(ag.authors[a.name])).slice(0, AUTHORS_PER_RUN)) {
+  const words = norm(a.name).split(" ").filter(w => w.length >= 3);
+  agTasks.push(async () => {
+    const books = await olBooks({ type: "author", value: a.name },
+      b => (b.authors || []).some(n => words.some(w => norm(n).split(" ").includes(w))), 12);
+    if (books) ag.authors[a.name] = { at: today, tag: a.tag, books };
+  });
+}
+await Promise.all(Array.from({ length: 3 }, async () => {
+  while (agTasks.length) { await agTasks.shift()(); await new Promise(r => setTimeout(r, 300)); }
+}));
+// Auteurs retirés de la liste des auteurs mis en avant : leur page disparaît.
+for (const name of Object.keys(ag.authors)) if (!FEATURED_AUTHORS.some(a => a.name === name)) delete ag.authors[name];
+fs.writeFileSync(AG_OUT, JSON.stringify(ag) + "\n");
+console.log(`data/auteurs-genres.json écrit : ${Object.keys(ag.genres).length} genres, ${Object.keys(ag.authors).length}/${FEATURED_AUTHORS.length} auteurs.`);
+
 /* ---------- Pages fixes pour les moteurs de recherche ---------------------- */
 const { generatePages } = await import("./pages-livres.mjs");
 const savedNews = (() => { try { return JSON.parse(fs.readFileSync(OUT, "utf8")); } catch { return { genres: {} }; } })();
@@ -418,7 +418,9 @@ const pages = generatePages({
   })),
   nouveautes: savedNews,
   genres: GENRES,
+  genreGroups: vm.runInContext("GENRE_GROUPS", context),
+  authorsGenres: ag,
   stores: vm.runInContext("STORES", context),
   storeUrl: vm.runInContext("storeUrl", context),
 });
-console.log(`Pages livres : ${pages.total} pages (${pages.written} écrites ou modifiées, ${pages.removed} retirées), sitemap.xml à jour.`);
+console.log(`Pages livres : ${pages.total} livres, ${pages.genresPages} genres, ${pages.authorPages} auteurs (${pages.written} pages écrites ou modifiées, ${pages.removed} retirées), sitemap.xml à jour.`);

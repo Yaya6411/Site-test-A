@@ -32,6 +32,8 @@ Les scripts utilisent le chemin absolu `/home/user/Site-test-A` et Chromium inst
 | `t25-couleurs-themes.mjs` | Couleurs réellement affichées en thème clair, sombre de l'appareil et sombre choisi. |
 | `t26-robot-nouveautes.mjs` | Usage des fichiers du robot, repli en direct (fichier absent ou trop ancien), mobile. Site servi en HTTP (voir l'en-tête du fichier). |
 | `t27-legal-contact.mjs` | Pages légales, formulaire de contact (champ piège), messages en modération, export des données, polices locales, mobile. |
+| `t28-classement.mjs` | Page Classement : fichier préparé, repli en direct (fichier absent ou trop ancien). |
+| `lancer-tests.sh` | Lance tous les tests sans réseau et échoue au moindre problème (utilisé par `.github/workflows/tests.yml`). |
 | `verif-messages.py` | Vraie base : refus attendus sur la collection `messages` (aucune écriture si les règles sont correctes). |
 | `verify4.py` | Vérification **sur la vraie base** des règles (31 tests) avec deux comptes temporaires, nettoyage inclus. Exécution : `python3 verify4.py`. |
 | `gen-img.mjs` | Génère les PNG (icônes, image de partage) à partir de `icon.svg`. |

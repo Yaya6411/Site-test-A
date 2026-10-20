@@ -14,7 +14,7 @@ permissions:
   pages: write
 
 concurrency:
-  group: nouveautes
+  group: robots-donnees   # même groupe que le robot du classement
   cancel-in-progress: false
 
 jobs:
@@ -49,6 +49,7 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "Nouveautés, incontournables et pages livres : mise à jour hebdomadaire"
+            git pull --rebase origin claude/youthful-archimedes-zcrfu4
             git push origin HEAD:claude/youthful-archimedes-zcrfu4
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi

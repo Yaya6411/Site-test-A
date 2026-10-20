@@ -45,6 +45,17 @@ h2{font:700 1.2rem Georgia,serif;margin:24px 0 10px}
 .list li{break-inside:avoid;margin-bottom:4px}
 footer.wrap{color:var(--muted);font-size:.9rem;padding:32px 16px;margin-top:24px}
 @media (max-width:640px){.book{grid-template-columns:1fr;padding:16px}.cover{max-width:200px}}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:18px;list-style:none;padding:0;margin:0 0 8px}
+.grid a{text-decoration:none;color:var(--ink);display:block}
+.grid .cover{margin-bottom:6px}
+.grid .gen{font-size:.95rem;padding:10px}
+.grid strong{display:block;font-size:.95rem;line-height:1.3}
+.grid small{color:var(--muted)}
+.grid .gen small{color:#fff;opacity:.85;font-size:.7rem}
+@media (max-width:640px){.btn{display:block;text-align:center}}
+.intro{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px 24px;margin-bottom:8px}
+.links{display:flex;flex-wrap:wrap;gap:8px;padding:0;list-style:none}
+.links a{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 12px;text-decoration:none;background:var(--card)}
 `;
 
 function layout({ title, description, canonical, image, jsonLd, body, depth = 1 }) {
@@ -136,7 +147,7 @@ ${related.length ? `<h2>Dans la même sélection : ${esc(section.name)}</h2>
   });
 }
 
-export function generatePages({ ROOT, SITE, mustReads, nouveautes, genres, stores, storeUrl }) {
+export function generatePages({ ROOT, SITE, mustReads, nouveautes, genres, genreGroups = [], authorsGenres = { authors: {}, genres: {} }, stores, storeUrl }) {
   const dir = path.join(ROOT, "livres");
   fs.mkdirSync(dir, { recursive: true });
   const used = new Map();   // nom de fichier → clé du livre
@@ -183,6 +194,95 @@ export function generatePages({ ROOT, SITE, mustReads, nouveautes, genres, store
     keep.add(entry.file);
     if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== html) { fs.writeFileSync(file, html); written++; }
   }
+  // Pages auteurs et genres.
+  const fileOfBook = new Map();
+  for (const e of byKey.values()) [e.book.id, ...(e.book.altIds || [])].forEach(id => fileOfBook.set(id, e.file));
+  const card = b => {
+    const title = mainTitle(b.title);
+    const href = fileOfBook.get(b.id) || (/^(g|ol)-/.test(b.id) ? `${SITE}#/livre/${encodeURIComponent(b.id)}` : `${SITE}#/recherche/all/${encodeURIComponent(title)}`);
+    const cover = (b.covers || [])[0];
+    return `<li><a href="${esc(href)}"><div class="cover">${cover
+      ? `<img src="${esc(cover)}" alt="" loading="lazy" width="140" height="210" referrerpolicy="no-referrer" onerror="this.hidden=true;this.nextElementSibling.hidden=false">` : ""}<div class="gen"${cover ? " hidden" : ""}><span>${esc(title)}</span><small>${esc((b.authors || [])[0] || "")}</small></div></div>
+      <strong>${esc(title)}</strong><small>${esc([(b.authors || [])[0], b.year].filter(Boolean).join(" · "))}</small></a></li>`;
+  };
+  const extraPages = []; // { file, url, title, kind, group }
+  const writePage = (file, html) => {
+    keep.add(file);
+    const full = path.join(dir, file);
+    if (!fs.existsSync(full) || fs.readFileSync(full, "utf8") !== html) { fs.writeFileSync(full, html); written++; }
+  };
+
+  const genreBooks = id => ((authorsGenres.genres || {})[id] || {}).books || [];
+  const genreNews = id => (sections.find(s2 => s2.id === `nouveautes-${id}`) || { entries: [] }).entries;
+  // Une page de genre n'existe que si elle a assez de contenu (4 livres ou des nouveautés).
+  const genreOk = new Set(genres.filter(g => genreBooks(g.id).length >= 4 || genreNews(g.id).length).map(g => g.id));
+  for (const g of genres) {
+    if (!genreOk.has(g.id)) continue;
+    const books = genreBooks(g.id);
+    const news = genreNews(g.id);
+    const file = `genre-${g.id}.html`;
+    const url = `${SITE}livres/${file}`;
+    const siblings = genres.filter(x => x.group === g.group && x.id !== g.id && genreOk.has(x.id));
+    const body = `
+<nav class="crumbs"><a href="../">Accueil</a> › <a href="./">Livres</a> › <a href="./#genres">Genres</a> › ${esc(g.name)}</nav>
+<section class="intro">
+  <h1>${esc(g.icon || "")} ${esc(g.name)}</h1>
+  <p class="by">Livres en français du genre « ${esc(g.name)} » (${esc(g.group)}), avec les avis des lecteurs et des liens vers les librairies en ligne.</p>
+  <p><a class="btn" href="${esc(`${SITE}#/genre/${g.id}`)}">Explorer tous les livres ${esc(g.name)}</a></p>
+</section>
+${books.length ? `<h2>Livres à découvrir</h2><ul class="grid">${books.map(card).join("")}</ul>` : ""}
+${news.length ? `<h2>Nouveautés ${esc(g.name)}</h2><ul class="grid">${news.slice(0, 18).map(e => card(e.book)).join("")}</ul>
+<p><a href="${esc(`${SITE}#/nouveautes/${g.id}`)}">Toutes les nouveautés ${esc(g.name)}</a></p>` : ""}
+${siblings.length ? `<h2>Genres proches</h2><ul class="links">${siblings.map(x => `<li><a href="genre-${esc(x.id)}.html">${esc(x.name)}</a></li>`).join("")}</ul>` : ""}`;
+    writePage(file, layout({
+      title: `${g.name} : livres en français | Biblio FR`,
+      description: `Livres du genre ${g.name} disponibles en français${books[0] ? ` : ${books.slice(0, 3).map(b => mainTitle(b.title)).join(", ")}…` : ""} Avis des lecteurs et liens d'achat.`.slice(0, 160),
+      canonical: url, image: ((books[0] || {}).covers || [])[0] || `${SITE}og-image.png`,
+      jsonLd: { "@context": "https://schema.org", "@type": "CollectionPage", name: `${g.name} — livres en français`, url, inLanguage: "fr" },
+      body,
+    }));
+    extraPages.push({ file, url, title: g.name, kind: "genre", group: g.group });
+  }
+  const authorEntries = Object.entries(authorsGenres.authors || {});
+  const authorFile = name => `auteur-${slug(name)}.html`;
+  const authorPagesSet = new Set();
+  for (const [name, info] of authorEntries) {
+    const books = info.books || [];
+    const words = String(name).toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+    const mustOfAuthor = [...byKey.values()].filter(e => e.key.startsWith("m:")
+      && (e.book.authors || [e.author]).some(n => words.some(w => String(n).toLowerCase().includes(w))));
+    if (books.length < 2 && !mustOfAuthor.length) continue;
+    authorPagesSet.add(name);
+  }
+  for (const name of authorPagesSet) {
+    const info = authorsGenres.authors[name];
+    const books = info.books || [];
+    const words = String(name).toLowerCase().split(/\s+/).filter(w => w.length >= 3);
+    const mustOfAuthor = [...byKey.values()].filter(e => e.key.startsWith("m:")
+      && (e.book.authors || [e.author]).some(n => words.some(w => String(n).toLowerCase().includes(w))));
+    const file = authorFile(name);
+    const url = `${SITE}livres/${file}`;
+    const sameTag = [...authorPagesSet].filter(n => n !== name && authorsGenres.authors[n].tag === info.tag).slice(0, 24);
+    const body = `
+<nav class="crumbs"><a href="../">Accueil</a> › <a href="./">Livres</a> › <a href="./#auteurs">Auteurs</a> › ${esc(name)}</nav>
+<section class="intro">
+  <h1>${esc(name)}</h1>
+  <p class="by">${esc(info.tag || "")} · livres de ${esc(name)} disponibles en français, avec les avis des lecteurs et des liens vers les librairies en ligne.</p>
+  <p><a class="btn" href="${esc(`${SITE}#/auteur/${encodeURIComponent(name)}`)}">Tous les livres de ${esc(name)}</a></p>
+</section>
+${mustOfAuthor.length ? `<h2>Incontournables</h2><ul class="grid">${mustOfAuthor.map(e => card(e.book)).join("")}</ul>` : ""}
+${books.length ? `<h2>Livres de ${esc(name)}</h2><ul class="grid">${books.map(card).join("")}</ul>` : ""}
+${sameTag.length ? `<h2>Autres auteurs : ${esc(info.tag || "")}</h2><ul class="links">${sameTag.map(n => `<li><a href="${esc(authorFile(n))}">${esc(n)}</a></li>`).join("")}</ul>` : ""}`;
+    writePage(file, layout({
+      title: `${name} : livres en français | Biblio FR`,
+      description: `Livres de ${name} en français${books[0] ? ` : ${books.slice(0, 3).map(b => mainTitle(b.title)).join(", ")}…` : ""} Avis des lecteurs et liens d'achat.`.slice(0, 160),
+      canonical: url, image: ((books[0] || {}).covers || [])[0] || `${SITE}og-image.png`,
+      jsonLd: { "@context": "https://schema.org", "@type": "ProfilePage", mainEntity: { "@type": "Person", name }, url, inLanguage: "fr" },
+      body,
+    }));
+    extraPages.push({ file, url, title: name, kind: "auteur", group: info.tag || "" });
+  }
+
   // Pages de livres qui ne sont plus dans aucune liste.
   let removed = 0;
   for (const f of fs.readdirSync(dir)) {
@@ -195,6 +295,14 @@ export function generatePages({ ROOT, SITE, mustReads, nouveautes, genres, store
 <nav class="crumbs"><a href="../">Accueil</a> › Livres</nav>
 <h1>Tous les livres de la sélection</h1>
 <p class="by">${total} livres en français : les incontournables et les nouveautés de la semaine, avec leurs avis et leurs liens d'achat.</p>
+${(() => {
+  const gp = extraPages.filter(x => x.kind === "genre");
+  const ap = extraPages.filter(x => x.kind === "auteur");
+  const grouped = (list, order) => [...new Set([...order, ...list.map(x => x.group)])].filter(gr => list.some(x => x.group === gr))
+    .map(gr => `<h3>${esc(gr)}</h3><ul class="links">${list.filter(x => x.group === gr).map(x => `<li><a href="${esc(x.file)}">${esc(x.title)}</a></li>`).join("")}</ul>`).join("");
+  return (gp.length ? `<h2 id="genres">Genres</h2>${grouped(gp, genreGroups.map(g => g.name))}` : "")
+    + (ap.length ? `<h2 id="auteurs">Auteurs</h2>${grouped(ap, [])}` : "");
+})()}
 ${sections.map(s => `<h2 id="${esc(s.id)}">${esc(s.name)}</h2>
 <ul class="list">${s.entries.map(e => `<li><a href="${esc(e.file)}">${esc(e.title)}</a> — ${esc((e.book.authors || [])[0] || e.author)}</li>`).join("")}</ul>`).join("\n")}`;
   fs.writeFileSync(path.join(dir, "index.html"), layout({
@@ -204,10 +312,10 @@ ${sections.map(s => `<h2 id="${esc(s.id)}">${esc(s.name)}</h2>
   }));
 
   // Plan du site.
-  const urls = [`${SITE}`, `${SITE}livres/`, ...[...byKey.values()].map(e => e.url)];
+  const urls = [`${SITE}`, `${SITE}livres/`, ...extraPages.map(x => x.url), ...[...byKey.values()].map(e => e.url)];
   fs.writeFileSync(path.join(ROOT, "sitemap.xml"),
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
     urls.map(u => `  <url><loc>${esc(u)}</loc></url>`).join("\n") + `\n</urlset>\n`);
 
-  return { total, written, removed };
+  return { total, written, removed, genresPages: extraPages.filter(x => x.kind === "genre").length, authorPages: extraPages.filter(x => x.kind === "auteur").length };
 }

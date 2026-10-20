@@ -2,7 +2,7 @@
 const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
-const root = path.resolve(__dirname, "../..");
+const root = process.env.SITE_DIR || path.resolve(__dirname, "../..");
 const calls = [];
 const fakeItem = {
   id: "manga-fr-1",

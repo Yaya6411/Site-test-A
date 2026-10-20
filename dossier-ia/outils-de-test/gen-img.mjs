@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 const R='/home/user/Site-test-A/'; const svg=fs.readFileSync(R+'icon.svg','utf8');
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium' });
 for (const n of [180,192,512]) { const p=await b.newPage({viewport:{width:n,height:n}}); await p.setContent(`<style>html,body{margin:0}svg{display:block;width:${n}px;height:${n}px}</style>${svg}`); await p.screenshot({path: R+(n===180?'apple-touch-icon.png':`icon-${n}.png`)}); await p.close(); }
 const p=await b.newPage({viewport:{width:1200,height:630}});
 await p.setContent(`<style>html,body{margin:0;width:1200px;height:630px;font-family:system-ui,sans-serif}

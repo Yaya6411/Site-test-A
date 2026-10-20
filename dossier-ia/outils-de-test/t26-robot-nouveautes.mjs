@@ -4,7 +4,7 @@
 import { chromium } from 'playwright';
 import { installCommon } from './fsmock.mjs';
 const BASE = process.env.BASE || 'http://localhost:8765/';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium' });
 async function run(label, { block = false, stale = false, width = 1280 } = {}) {
   const p = await b.newPage({ viewport: { width, height: 900 } }); const errs = []; p.on('pageerror', e => errs.push(e.message));
   const calls = { google: 0 };

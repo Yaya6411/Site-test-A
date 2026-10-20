@@ -27,6 +27,7 @@ Site web gratuit qui répertorie les livres disponibles en français (romans, ma
 | `11-integration-v12.md` | Intégration de la v12 : vérifications, défauts corrigés (thème sombre, badge, mobile), points non démontrés. |
 | `12-robot-nouveautes.md` | Robot hebdomadaire (GitHub Actions) des nouveautés et des incontournables, listes allongées. |
 | `13-legal-contact-sauvegarde.md` | Mentions légales, confidentialité (RGPD), formulaire de contact, export des données, polices locales, sauvegarde chiffrée. |
+| `14-tests-classement-auteurs-genres.md` | Tests automatiques GitHub, classement préparé chaque matin, pages auteurs et genres. |
 | `firestore.rules` | Copie des règles de sécurité actuellement publiées. |
 | `outils-de-test/` | Scripts de test (Playwright avec API simulées, vérification des règles sur la vraie base). |
 

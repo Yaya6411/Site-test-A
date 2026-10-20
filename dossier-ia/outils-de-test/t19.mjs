@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import { installCommon, installFirestore } from './fsmock.mjs';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium' });
 const SRU=`<?xml version="1.0" encoding="UTF-8"?><srw:searchRetrieveResponse xmlns:srw="http://www.loc.gov/zing/srw/"><srw:numberOfRecords>2</srw:numberOfRecords><srw:records>
 <srw:record><srw:recordData><oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/" xmlns:dc="http://purl.org/dc/elements/1.1/">
 <dc:title>Le petit prince / Antoine de Saint-Exupéry ; avec des aquarelles de l'auteur</dc:title><dc:creator>Saint-Exupéry, Antoine de (1900-1944). Auteur du texte</dc:creator>

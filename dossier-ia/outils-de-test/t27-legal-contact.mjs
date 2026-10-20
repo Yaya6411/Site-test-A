@@ -1,7 +1,7 @@
 // Pages légales, formulaire de contact, messages en modération, export des données, polices locales.
 import { chromium } from 'playwright';
 import { installCommon, installFirestore } from './fsmock.mjs';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium' });
 const p = await b.newPage({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
 const errs = []; p.on('pageerror', e => errs.push(e.message));
 const external = new Set(); p.on('request', r => { const h = new URL(r.url()).host; if (h) external.add(h); });

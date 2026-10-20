@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import { installCommon } from './fsmock.mjs';
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM || '/opt/pw-browsers/chromium' });
 const items=Array.from({length:12},(_,i)=>({id:'b'+i,volumeInfo:{title:['Dune','Fondation','Le Petit Prince','One Piece','Les Misérables','L\'Étranger'][i%6]+(i>5?' tome '+i:''),authors:[['Frank Herbert','Isaac Asimov','Antoine de Saint-Exupéry','Eiichiro Oda','Victor Hugo','Albert Camus'][i%6]],language:'fr',publishedDate:'2026'}}));
 async function shot(name, w, h, scheme, hash='#/') {
   const p = await b.newPage({viewport:{width:w,height:h}, colorScheme:scheme}); const errs=[]; p.on('pageerror',e=>errs.push(e.message));
