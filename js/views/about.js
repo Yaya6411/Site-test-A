@@ -52,11 +52,12 @@ function viewAbout() {
         </table>
       </div>
       <p>Vous pouvez supprimer à tout moment votre compte depuis « Mon compte » : vos avis, votre profil, votre bibliothèque
-        et vos listes sont alors effacés. Aucune donnée n'est revendue ni utilisée à des fins publicitaires.</p>
+        et vos listes sont alors effacés. Aucune donnée n'est revendue ni utilisée à des fins publicitaires.
+        Le détail figure dans la <a href="#/confidentialite">politique de confidentialité</a>.</p>
 
       <h2>Accessibilité</h2>
       <p>Le site se parcourt au clavier (lien « Aller au contenu », autocomplétion avec les flèches, fenêtres fermées avec Échap),
         respecte le réglage « réduire les animations » de votre appareil et s'adapte au thème clair ou sombre.
-        Un problème d'accessibilité ? Signalez-le au propriétaire du site.</p>
+        Un problème d'accessibilité ? <a href="#/contact">Écrivez-nous</a>.</p>
     </article>`;
 }

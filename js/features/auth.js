@@ -294,6 +294,9 @@ function viewAccount() {
         <label class="check-row"><input type="checkbox" id="show-library">
           Afficher ma bibliothèque (Lus, En cours, À lire) sur mon profil public</label>
         <p class="muted small">Vos listes restent privées sauf celles que vous rendez publiques. L'historique n'est jamais partagé.</p>
+        <button type="button" class="more-btn" id="export-data">Télécharger mes données</button>
+        <p class="muted small">Un fichier contenant votre compte, votre profil, vos avis, votre bibliothèque, vos listes et vos abonnements
+          (<a href="#/confidentialite">confidentialité</a>).</p>
         <hr>
         <h2>Sécurité</h2>
         ${isPassword
@@ -359,6 +362,49 @@ function viewAccount() {
   });
 
   document.getElementById("logout").addEventListener("click", () => fbAuth.signOut());
+
+  // Droit à la portabilité : toutes les données du compte dans un fichier JSON.
+  const exportBtn = document.getElementById("export-data");
+  exportBtn.addEventListener("click", async () => {
+    exportBtn.disabled = true;
+    exportBtn.textContent = "Préparation…";
+    try {
+      const [profile, reviews, following, followers] = await Promise.all([
+        firestore.get(`users/${user.uid}`).catch(() => null),
+        firestoreReviews.listByUser(user.uid),
+        social.followingIds(user.uid).catch(() => []),
+        firestore.list(`users/${user.uid}/followers`).then(l => l.map(f => f.id)).catch(() => []),
+      ]);
+      const data = {
+        exportedAt: new Date().toISOString(),
+        site: "Biblio FR — https://yaya6411.github.io/Site-test-A/",
+        account: {
+          uid: user.uid, email: user.email, emailVerified: user.emailVerified,
+          createdAt: user.metadata && user.metadata.creationTime, lastSignInAt: user.metadata && user.metadata.lastSignInTime,
+          providers: (user.providerData || []).map(p => p.providerId),
+        },
+        profile,
+        reviews,
+        library: [...library.entries.values()],
+        lists: [...library.lists.values()],
+        following,
+        followers,
+      };
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `biblio-fr-mes-donnees-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      exportBtn.textContent = "Télécharger mes données";
+    } catch (err) {
+      exportBtn.textContent = err.message;
+    } finally {
+      exportBtn.disabled = false;
+    }
+  });
 
   const del = document.getElementById("delete-account");
   del.addEventListener("click", async () => {

@@ -26,6 +26,7 @@ Site web gratuit qui répertorie les livres disponibles en français (romans, ma
 | `08` à `10` | Travail d'une autre IA (v11/v12) : variantes de recherche par genre, comparaison simulée, transmission. |
 | `11-integration-v12.md` | Intégration de la v12 : vérifications, défauts corrigés (thème sombre, badge, mobile), points non démontrés. |
 | `12-robot-nouveautes.md` | Robot hebdomadaire (GitHub Actions) des nouveautés et des incontournables, listes allongées. |
+| `13-legal-contact-sauvegarde.md` | Mentions légales, confidentialité (RGPD), formulaire de contact, export des données, polices locales, sauvegarde chiffrée. |
 | `firestore.rules` | Copie des règles de sécurité actuellement publiées. |
 | `outils-de-test/` | Scripts de test (Playwright avec API simulées, vérification des règles sur la vraie base). |
 

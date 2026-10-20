@@ -55,6 +55,20 @@ service cloud.firestore {
       allow read, delete: if isAdmin();
     }
 
+    // Messages du formulaire de contact : tout visiteur peut écrire (avec ou sans compte) ;
+    // seuls les modérateurs les lisent et les suppriment. Un compte connecté ne peut pas
+    // se faire passer pour un autre (uid vide ou le sien).
+    match /messages/{messageId} {
+      allow create: if request.resource.data.keys().hasOnly(['subject', 'body', 'replyTo', 'uid', 'createdAt'])
+        && request.resource.data.subject in ['erreur', 'avis', 'donnees', 'autre']
+        && request.resource.data.body is string && request.resource.data.body.size() >= 10 && request.resource.data.body.size() <= 3000
+        && request.resource.data.replyTo is string && request.resource.data.replyTo.size() <= 200
+        && request.resource.data.uid is string
+        && (request.resource.data.uid == '' || isUser(request.resource.data.uid))
+        && request.resource.data.createdAt == request.time;
+      allow read, delete: if isAdmin();
+    }
+
     // Modérateurs : chacun peut seulement vérifier s'il en fait partie.
     match /admins/{uid} {
       allow read: if isUser(uid);

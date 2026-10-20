@@ -74,7 +74,8 @@ ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(
 <main class="wrap">
 ${body}
 </main>
-<footer class="wrap">Biblio FR — catalogue des livres en français. Données : Google Books, Open Library, BnF. Les liens d'achat mènent vers des librairies en ligne.</footer>
+<footer class="wrap">Biblio FR — catalogue des livres en français. Données : Google Books, Open Library, BnF. Les liens d'achat mènent vers des librairies en ligne.<br>
+<a href="${up}#/mentions-legales">Mentions légales</a> · <a href="${up}#/confidentialite">Confidentialité</a> · <a href="${up}#/contact">Contact</a></footer>
 </body>
 </html>
 `;

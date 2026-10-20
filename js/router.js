@@ -45,6 +45,12 @@ function route() {
       return viewModeration();
     case "a-propos":
       return viewAbout();
+    case "mentions-legales":
+      return viewLegalNotice();
+    case "confidentialite":
+      return viewPrivacy();
+    case "contact":
+      return viewContact();
     case "fil":
       return viewFeed();
     case "livre":

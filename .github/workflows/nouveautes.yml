@@ -60,3 +60,44 @@ jobs:
           curl -sS -X POST -H "Authorization: Bearer ${{ github.token }}" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/pages/builds"
+
+  # Sauvegarde chiffrée des avis et profils publics, gardée 90 jours (onglet Actions → ce passage → Artifacts).
+  # Ne fait rien tant que le secret BACKUP_PASSWORD n'existe pas (Settings → Secrets and variables → Actions).
+  sauvegarde:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: claude/youthful-archimedes-zcrfu4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Lire et chiffrer les données publiques
+        id: backup
+        env:
+          BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
+        run: |
+          if [ -z "$BACKUP_PASSWORD" ]; then
+            echo "Secret BACKUP_PASSWORD absent : sauvegarde ignorée."
+            echo "done=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          node scripts/sauvegarde-avis.mjs sauvegarde.json
+          gzip -9 sauvegarde.json
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSWORD \
+            -in sauvegarde.json.gz -out "sauvegarde-$(date -u +%Y-%m-%d).json.gz.enc"
+          rm sauvegarde.json.gz
+          echo "done=true" >> "$GITHUB_OUTPUT"
+
+      - name: Conserver la sauvegarde
+        if: steps.backup.outputs.done == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sauvegarde-biblio-fr
+          path: sauvegarde-*.json.gz.enc
+          retention-days: 90

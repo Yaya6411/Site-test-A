@@ -130,14 +130,17 @@ async function viewModeration() {
 
   let reports = [];
   let hidden = [];
+  let messages = [];
   try {
-    [reports, hidden] = await Promise.all([
+    [reports, hidden, messages] = await Promise.all([
       firestore.runQuery({ from: [{ collectionId: "reports" }], limit: 500 }),
       firestore.runQuery({
         from: [{ collectionId: "reviews" }],
         where: { fieldFilter: { field: { fieldPath: "hidden" }, op: "EQUAL", value: { booleanValue: true } } },
         limit: 200,
       }),
+      // Les règles d'avant le formulaire de contact refusent cette lecture : la page reste utilisable.
+      firestore.runQuery({ from: [{ collectionId: "messages" }], limit: 200 }).catch(() => null),
     ]);
   } catch (err) {
     app.innerHTML = `<p class="error">${esc(err.message)}</p>`;
@@ -187,11 +190,37 @@ async function viewModeration() {
         : `<p class="muted">Aucun signalement en attente. 🎉</p>`}
     </section>
     <section class="account-card">
+      <h2>Messages reçus <span class="muted small">· ${messages ? messages.length : "?"}</span></h2>
+      ${messages === null ? `<p class="error small">Lecture impossible : publiez les règles Firestore à jour (collection « messages »).</p>`
+        : messages.length ? `<ul class="mod-list">${[...messages].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).map(m => `
+          <li class="mod-row" data-message-id="${esc(m.id)}">
+            <p class="small"><strong>${esc((CONTACT_SUBJECTS.find(([v]) => v === m.subject) || ["", m.subject])[1])}</strong>
+              <span class="muted">· ${m.createdAt ? esc(new Date(m.createdAt).toLocaleString("fr-FR")) : ""}</span>
+              ${m.uid ? `· ${profileLink(m.uid, "profil de l'expéditeur")}` : `<span class="muted">· sans compte</span>`}</p>
+            <p class="mod-message">${esc(m.body)}</p>
+            <p class="small">Répondre à : ${m.replyTo ? `<strong>${esc(m.replyTo)}</strong>` : `<span class="muted">aucun moyen de contact indiqué</span>`}</p>
+            <div class="mod-actions"><button type="button" class="link-btn danger" data-msg="delete">Traité : supprimer le message</button></div>
+          </li>`).join("")}</ul>`
+        : `<p class="muted">Aucun message.</p>`}
+    </section>
+    <section class="account-card">
       <h2>Avis masqués <span class="muted small">· ${hiddenOnly.length}</span></h2>
       ${hiddenOnly.length ? `<ul class="mod-list">${hiddenOnly.map(h => row(h.id, h, [])).join("")}</ul>` : `<p class="muted">Aucun avis masqué.</p>`}
     </section>`;
 
-  app.querySelectorAll(".mod-row").forEach(li => {
+  app.querySelectorAll("[data-message-id] [data-msg=delete]").forEach(btn => btn.addEventListener("click", async () => {
+    if (btn.dataset.confirm !== "1") { btn.dataset.confirm = "1"; btn.textContent = "Confirmer la suppression"; return; }
+    btn.disabled = true;
+    try {
+      await firestore.remove(`messages/${btn.closest("[data-message-id]").dataset.messageId}`);
+      viewModeration();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = err.message;
+    }
+  }));
+
+  app.querySelectorAll(".mod-row[data-review-id]").forEach(li => {
     const id = li.dataset.reviewId;
     li.querySelectorAll("[data-mod]").forEach(btn => btn.addEventListener("click", async () => {
       const action = btn.dataset.mod;
