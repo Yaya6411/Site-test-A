@@ -42,7 +42,7 @@ Depuis la feuille de route (versions 1.1 à 2.0), le JavaScript est découpé en
 | `js/ui/book.js` | Fiche livre en modale, `currentBook`, partage (`shareBook`, `#/livre/<id>`). |
 | `js/views/catalog.js` | Accueil, genres, auteurs, résultats (filtres combinables, aucun résultat → suggestions). |
 | `js/views/discover.js` | Classement, Nouveautés, Incontournables (lisent d'abord `data/nouveautes.json` et `data/incontournables.json`). |
-| `scripts/robot-nouveautes.mjs` + `.github/workflows/nouveautes.yml` | Robot hebdomadaire (lundi) qui prépare ces deux fichiers. |
+| `scripts/robot-nouveautes.mjs` + `.github/workflows/nouveautes.yml` | Robot hebdomadaire (lundi) qui prépare ces deux fichiers, puis les pages `livres/*.html` et `sitemap.xml` via `scripts/pages-livres.mjs`. |
 | `js/views/about.js` | Page « À propos » (sources, avis, données personnelles, accessibilité). |
 | `js/features/auth.js` | Firebase Auth, fenêtre connexion/inscription, page « Mon compte ». |
 | `js/features/reviews.js` | Avis : lecture, création (`commit`, date serveur), modification, suppression, signalement, e-mail vérifié. |

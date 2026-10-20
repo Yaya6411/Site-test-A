@@ -294,7 +294,11 @@ function loadMustFile() {
   if (!mustFilePromise) {
     mustFilePromise = fetch("data/incontournables.json", { cache: "no-cache" })
       .then(res => (res.ok ? res.json() : null))
-      .then(data => (data && data.books) || {})
+      .then(data => {
+        const books = (data && data.books) || {};
+        Object.values(books).forEach(b => { bookCache.set(b.id, b); (b.altIds || []).forEach(id => bookCache.set(id, b)); });
+        return books;
+      })
       .catch(() => ({}));
   }
   return mustFilePromise;

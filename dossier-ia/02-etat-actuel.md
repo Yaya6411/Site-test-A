@@ -12,6 +12,7 @@
 | Lien partagé `#/livre/<id>` | Ouvre la fiche d'un livre (identifiants `g-…` Google, `ol-…` Open Library). |
 | Classement `#/classement` | Livres ayant reçu le plus d'avis (7 jours, 30 jours, depuis toujours). |
 | Nouveautés `#/nouveautes[/<genre>]` | Parutions en français de l'année en cours et de la précédente, badge « Nouveau ». Première page : sélection hebdomadaire du robot (`data/nouveautes.json`) ; « Charger plus » et repli en direct si le fichier manque ou a plus de 21 jours. |
+| Pages livres `livres/`, `livres/<titre-auteur>.html` | Vraies pages (hors application) générées chaque semaine pour les moteurs de recherche, avec lien vers la fiche interactive. |
 | Incontournables `#/incontournables[/<catégorie>]` | 258 livres de référence en 10 catégories ; fiches préparées chaque semaine par le robot (`data/incontournables.json`), sinon retrouvées en direct. |
 | Lecteurs `#/lecteurs`, `#/lecteur/<uid>` | Recherche par pseudo, profils publics : avatar, statistiques, répartition des notes, avis, bibliothèque et listes publiques, abonnés / abonnements, bouton « Suivre ». |
 | Ma bibliothèque `#/bibliotheque/<onglet>` | En cours, À lire, Lus, Favoris, Mes listes, Historique ; statistiques (lus, lus dans l'année, pages, avis, note moyenne). |

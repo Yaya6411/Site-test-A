@@ -10,6 +10,7 @@ romans, mangas, bandes dessinées, essais, jeunesse, etc.
 - **Couvertures** : image de la source, puis Open Library et Amazon via l'ISBN ; à défaut, une couverture est dessinée avec le titre.
 - **Incontournables** : 258 livres de référence en 10 catégories (classiques, mangas, BD, essais…).
 - **Classement** des livres les plus commentés et **Nouveautés** (parutions récentes, liste mise à jour chaque lundi par un robot GitHub Actions — voir `dossier-ia/12-robot-nouveautes.md`).
+- **Pages livres** (`livres/`) : une vraie page par incontournable et par nouveauté, avec plan du site, pour que les moteurs de recherche trouvent les livres.
 - **Filtre** des agendas, calendriers, coloriages, carnets vierges et livres de grilles.
 - **Recherche** globale, par titre, par auteur ou par ISBN : sans accents, tolérante aux fautes de frappe,
   autocomplétion, filtres combinables (année, auteur, genre), « Vouliez-vous dire » quand rien n'est trouvé.

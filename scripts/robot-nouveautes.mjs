@@ -91,6 +91,68 @@ const slim = b => ({
   ...(b.altIds && b.altIds.length ? { altIds: b.altIds.slice(0, 6) } : {}),
 });
 
+/* ---------- Recherche par éditeur ------------------------------------------
+ * Les sources classent mal les mangas, BD et livres jeunesse par sujet : pour
+ * ces genres, on interroge aussi les catalogues des éditeurs spécialisés.
+ * Un livre est gardé s'il est récent et si ses catégories (quand il y en a)
+ * correspondent au genre.
+ * ------------------------------------------------------------------------- */
+const PUBLISHER_QUERIES = {
+  manga: ["Ki-oon", "Kana", "Pika", "Kurokawa", "Kazé", "Akata", "Mangetsu", "Meian", "Noeve", "Glénat"],
+  bd: ["Dargaud", "Dupuis", "Le Lombard", "Casterman", "Delcourt", "Bamboo", "Soleil", "Futuropolis", "Rue de Sèvres", "Glénat"],
+  "young-adult": ["Pocket Jeunesse", "Hachette Romans", "Rageot", "Lumen", "Gallimard Jeunesse", "Casterman", "Michel Lafon", "De Saxus"],
+  jeunesse: ["L'École des loisirs", "Gallimard Jeunesse", "Bayard Jeunesse", "Nathan", "Milan", "Flammarion Jeunesse", "Père Castor", "Auzou"],
+};
+const GENRE_FIT = {
+  manga: /\b(manga|mangas|comic|comics|graphic|bande dessinee|bandes dessinees|seinen|shonen|shojo)\b/,
+  bd: /\b(comic|comics|graphic|bande dessinee|bandes dessinees|bd|humour|humor)\b/,
+  "young-adult": /\b(young adult|juvenile|jeunesse|ado|adolescents|teen|fantasy|romance)\b/,
+  jeunesse: /\b(juvenile|jeunesse|enfant|enfants|children|album|albums|contes)\b/,
+};
+
+function fitsGenre(book, genreId) {
+  const cats = vm.runInContext("norm", context)((book.categories || []).join(" | "));
+  return !cats || GENRE_FIT[genreId].test(cats);
+}
+
+async function publisherSearch(publisher, genreId) {
+  const fn = name => vm.runInContext(name, context);
+  const books = [];
+  const keep = b => isRecent(b) && fitsGenre(b, genreId);
+  // Google Books
+  try {
+    const data = await fn("sources").google.request(`inpublisher:"${publisher}"`, 0, "new");
+    books.push(...(data.items || [])
+      .filter(it => !it.volumeInfo.language || it.volumeInfo.language === "fr")
+      .filter(it => !fn("isLowContent")(it.volumeInfo.title, it.volumeInfo.subtitle, it.volumeInfo.categories))
+      .map(fn("normalizeGoogle")).filter(keep));
+  } catch { /* source indisponible */ }
+  // Open Library
+  try {
+    const params = new URLSearchParams({ publisher, language: "fre", sort: "new", limit: 40, fields: fn("OL_FIELDS") });
+    const res = await robotFetch(`https://openlibrary.org/search.json?${params}`);
+    if (res.ok) {
+      books.push(...((await res.json()).docs || [])
+        .filter(doc => !fn("isLowContent")(doc.title, doc.subtitle, doc.subject))
+        .map(fn("normalizeOpenLibrary")).filter(keep));
+    }
+  } catch { /* source indisponible */ }
+  // BnF
+  if (DOMParser) {
+    try {
+      const cql = `bib.publisher all "${publisher.replace(/"/g, " ")}" and bib.date any "${year} ${year - 1}" and bib.language any "fre" and bib.doctype any "a"`;
+      const params = new URLSearchParams({ version: "1.2", operation: "searchRetrieve", recordSchema: "dublincore", query: cql, maximumRecords: 30 });
+      const res = await robotFetch(`${fn("BNF_SRU")}?${params}`);
+      if (res.ok) {
+        const xml = new DOMParser().parseFromString(await res.text(), "application/xml");
+        books.push(...[...xml.getElementsByTagName("srw:record")].map(fn("normalizeBnf"))
+          .filter(b => b.title && !fn("isLowContent")(b.title, "", b.categories)).filter(keep));
+      }
+    } catch { /* source indisponible */ }
+  }
+  return books;
+}
+
 async function collect(genre) {
   const searchBooks = vm.runInContext("searchBooks", context);
   const found = [];
@@ -109,7 +171,14 @@ async function collect(genre) {
       break;
     }
   }
-  return { books: found, labels: [...labels] };
+  const publishers = (genre && PUBLISHER_QUERIES[genre.id]) || [];
+  for (const publisher of publishers) {
+    found.push(...await publisherSearch(publisher, genre.id));
+    await new Promise(r => setTimeout(r, 300));
+  }
+  if (publishers.length) labels.add("éditeurs");
+  // Les éditions d'une même œuvre trouvées par plusieurs chemins sont fusionnées.
+  return { books: vm.runInContext("dedupeWorks", context)(found), labels: [...labels].filter(l => l !== "éditeurs") };
 }
 
 // Nouvelle liste : livres trouvés cette semaine d'abord, puis les anciens encore récents.
@@ -124,10 +193,13 @@ function mergeList(fresh, previous, today) {
     const k = workKey(b);
     if (!out.has(k) && isRecent(b)) out.set(k, b);
   }
-  return [...out.values()]
-    .sort((a, b) => Number(b.year) - Number(a.year) || String(b.addedAt).localeCompare(String(a.addedAt)))
-    .slice(0, MAX_PER_LIST);
+  return [...out.values()];
 }
+
+// Ordre d'affichage : année, puis livres avec une vraie couverture, puis les plus récemment ajoutés.
+const hasCover = b => (b.covers || []).length > 0;
+const byDisplayOrder = (a, b) => Number(b.year) - Number(a.year) || hasCover(b) - hasCover(a)
+  || String(b.addedAt).localeCompare(String(a.addedAt));
 
 const previous = (() => { try { return JSON.parse(fs.readFileSync(OUT, "utf8")); } catch { return null; } })();
 const today = new Date().toISOString().slice(0, 10);
@@ -136,15 +208,88 @@ const result = { version: 1, generatedAt: new Date().toISOString(), years: [year
 const allSources = new Set();
 let freshCount = 0;
 
+const rawLists = {};
 for (const id of [null, ...RECENT_GENRES]) {
   const genre = id ? GENRES.find(g => g.id === id) : null;
   if (id && !genre) continue;
   const { books, labels } = await collect(genre);
   labels.forEach(l => allSources.add(l));
   freshCount += books.length;
-  const list = mergeList(books, id ? previous && previous.genres && previous.genres[id] : previous && previous.all, today);
-  if (id) result.genres[id] = list; else result.all = list;
-  console.log(`${(id || "tout").padEnd(16)} ${String(books.length).padStart(3)} trouvés, ${list.length} gardés (${labels.join(" + ") || "aucune source"})`);
+  rawLists[id || ""] = mergeList(books, id ? previous && previous.genres && previous.genres[id] : previous && previous.all, today);
+  console.log(`${(id || "tout").padEnd(16)} ${String(books.length).padStart(3)} trouvés (${labels.join(" + ") || "aucune source"})`);
+}
+
+/* ---------- Vérification des couvertures -----------------------------------
+ * Chaque image candidate est téléchargée une fois : on garde la première qui
+ * fonctionne, ou aucune (le site dessine alors une couverture avec le titre).
+ * Open Library limite les recherches d'image par ISBN : 80 au plus par passage.
+ * ------------------------------------------------------------------------- */
+const checkedBefore = new Map();
+for (const list of [previous && previous.all, ...Object.values((previous && previous.genres) || {})]) {
+  for (const b of list || []) if (b.coversChecked) checkedBefore.set(b.id, b.covers);
+}
+let olIsbnBudget = 80;
+async function coverWorks(url) {
+  if (url.includes("covers.openlibrary.org/b/isbn/")) {
+    if (olIsbnBudget <= 0) return null;
+    olIsbnBudget--;
+  }
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000), headers: { "User-Agent": "BiblioFR-robot-nouveautes (" + SITE + ")" } });
+    if (!res.ok) return res.status === 404 ? false : null;
+    if (!(res.headers.get("content-type") || "").startsWith("image/")) return false;
+    // Amazon renvoie un pixel transparent quand il n'a pas l'image.
+    return (await res.arrayBuffer()).byteLength > 1000;
+  } catch {
+    return null; // erreur réseau : on ne conclut pas
+  }
+}
+async function checkCovers(book) {
+  if (checkedBefore.has(book.id)) return { ...book, covers: checkedBefore.get(book.id), coversChecked: true };
+  let unsure = false;
+  for (const url of book.covers || []) {
+    const ok = await coverWorks(url);
+    if (ok) return { ...book, covers: [url], coversChecked: true };
+    if (ok === null) unsure = true;
+  }
+  return unsure ? book : { ...book, covers: [], coversChecked: true };
+}
+const uniqueBooks = new Map();
+for (const list of Object.values(rawLists)) for (const b of list) uniqueBooks.set(b.id, b);
+const pendingBooks = [...uniqueBooks.values()];
+let coversFound = 0;
+await Promise.all(Array.from({ length: 6 }, async () => {
+  while (pendingBooks.length) {
+    const b = pendingBooks.shift();
+    const checked = await checkCovers(b);
+    if (hasCover(checked) && checked.coversChecked) coversFound++;
+    uniqueBooks.set(b.id, checked);
+  }
+}));
+for (const key of Object.keys(rawLists)) rawLists[key] = rawLists[key].map(b => uniqueBooks.get(b.id));
+console.log(`Couvertures vérifiées : ${coversFound} trouvées sur ${uniqueBooks.size} livres.`);
+
+for (const id of RECENT_GENRES) {
+  if (rawLists[id]) result.genres[id] = [...rawLists[id]].sort(byDisplayOrder).slice(0, MAX_PER_LIST);
+}
+
+// « Tout » : un mélange des genres (romans, polars, mangas…) avant les résultats généraux,
+// pour éviter une liste dominée par les essais et les guides pratiques.
+const TOUT_ORDER = ["romans", "policier", "thriller", "fantasy", "science-fiction", "manga", "bd", "romance",
+  "jeunesse", "young-adult", "biographies", "dev-perso"];
+const mixed = [];
+const lists = TOUT_ORDER.map(id => result.genres[id] || []);
+for (let i = 0; i < MAX_PER_LIST; i++) for (const list of lists) if (list[i]) mixed.push(list[i]);
+mixed.push(...[...(rawLists[""] || [])].sort(byDisplayOrder));
+const seenTout = new Set();
+result.all = mixed
+  .filter(b => { const k = workKey(b); if (seenTout.has(k)) return false; seenTout.add(k); return true; })
+  .map((b, rank) => ({ b, rank }))
+  .sort((x, y) => Number(y.b.year) - Number(x.b.year) || hasCover(y.b) - hasCover(x.b) || x.rank - y.rank)
+  .map(x => x.b)
+  .slice(0, MAX_PER_LIST);
+for (const [id, list] of [["tout", result.all], ...Object.entries(result.genres)]) {
+  console.log(`  ${id.padEnd(16)} ${String(list.length).padStart(3)} gardés, ${list.filter(hasCover).length} avec couverture`);
 }
 result.sources = [...allSources];
 
@@ -185,16 +330,44 @@ for (const cat of MUST_READS) {
 // Les livres jamais trouvés passent d'abord, puis les fiches les plus anciennes.
 queue.sort((a, b) => (must[a.key] ? 1 : 0) - (must[b.key] ? 1 : 0));
 const mustDeadline = Date.now() + MUST_BUDGET_MS;
+
+// Correspondance souple : même titre (ou titre suivi d'un numéro de tome, d'un sous-titre…)
+// et au moins un mot du nom de l'auteur en commun, quel que soit l'ordre nom/prénom.
+const mainTitle = t => reviewKey({ title: t, authors: [""] }).split("|")[0];
+const nameWords = s => vm.runInContext("norm", context)(s).split(" ").filter(w => w.length >= 3);
+const FIRST_VOLUME = /\b(?:t|tome|vol|volume)\s*0*1\b|\b0*1$/;
+function bestMustMatch(books, title, author, key) {
+  const exact = books.find(b => reviewKey(b) === key);
+  if (exact) return exact;
+  const want = mainTitle(title);
+  const words = nameWords(author);
+  const candidates = books.filter(b => {
+    const got = mainTitle(b.title);
+    // « Millénium 1 — Les hommes qui n'aimaient pas les femmes » : titre long contenu dans celui de l'édition.
+    const full = vm.runInContext("norm", context)(b.title);
+    const inside = want.split(" ").length >= 3 && ` ${full} `.includes(` ${want} `);
+    if (!(got === want || got.startsWith(want + " ") || inside)) return false;
+    const authorWords = new Set((b.authors || []).flatMap(nameWords));
+    return words.some(w => authorWords.has(w));
+  });
+  // Préférence : titre exact, puis premier tome, puis l'ordre de pertinence.
+  return candidates.find(b => mainTitle(b.title) === want)
+    || candidates.find(b => FIRST_VOLUME.test(mainTitle(b.title)))
+    || candidates[0] || null;
+}
 async function mustWorker() {
   while (queue.length && Date.now() < mustDeadline) {
     const { title, author, key } = queue.shift();
     vm.runInContext("for (const k in sourceDownUntil) delete sourceDownUntil[k]", context);
     mustSearched++;
     try {
-      const { books } = await searchBooks({ type: "all", value: `${title} ${author}` });
-      const surname = key.split("|")[1];
-      const book = books.find(b => reviewKey(b) === key)
-        || books.find(b => reviewKey(b).split("|")[1] === surname && reviewKey(b).startsWith(key.split("|")[0]));
+      let book = null;
+      // 1. titre + auteur ; 2. titre seul (les catalogues inversent souvent nom et prénom japonais).
+      for (const query of [{ type: "all", value: `${title} ${author}` }, { type: "title", value: title }]) {
+        const { books } = await searchBooks(query);
+        book = bestMustMatch(books, title, author, key);
+        if (book) break;
+      }
       if (book) { must[key] = { ...slim(book), at: today }; mustFound++; }
     } catch { /* fiche précédente conservée */ }
   }
@@ -205,3 +378,22 @@ const mustTotal = MUST_READS.reduce((n, c) => n + c.books.length, 0);
 fs.mkdirSync(path.dirname(MUST_OUT), { recursive: true });
 fs.writeFileSync(MUST_OUT, JSON.stringify({ version: 1, generatedAt: new Date().toISOString(), books: must }) + "\n");
 console.log(`data/incontournables.json écrit : ${Object.keys(must).length}/${mustTotal} fiches (${mustSearched} recherchées cette semaine, ${mustFound} trouvées).`);
+
+/* ---------- Pages fixes pour les moteurs de recherche ---------------------- */
+const { generatePages } = await import("./pages-livres.mjs");
+const savedNews = (() => { try { return JSON.parse(fs.readFileSync(OUT, "utf8")); } catch { return { genres: {} }; } })();
+const pages = generatePages({
+  ROOT, SITE,
+  mustReads: MUST_READS.map(cat => ({
+    name: cat.name,
+    items: cat.books.map(([title, author]) => {
+      const key = reviewKey({ title, authors: [author] });
+      return { key: `m:${key}`, title, author, book: must[key] || null };
+    }),
+  })),
+  nouveautes: savedNews,
+  genres: GENRES,
+  stores: vm.runInContext("STORES", context),
+  storeUrl: vm.runInContext("storeUrl", context),
+});
+console.log(`Pages livres : ${pages.total} pages (${pages.written} écrites ou modifiées, ${pages.removed} retirées), sitemap.xml à jour.`);

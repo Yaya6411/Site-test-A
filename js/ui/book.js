@@ -74,6 +74,8 @@ async function shareBook(book, btn) {
 async function viewSharedBook(id) {
   viewHome();
   let book = null;
+  // Les fiches préparées par le robot (nouveautés, incontournables) s'ouvrent sans appel aux sources.
+  await Promise.all([loadWeeklyRecent(), loadMustFile()]);
   try { book = await fetchBookById(id); } catch { /* source indisponible */ }
   if (!location.hash.startsWith("#/livre/")) return;
   if (book) openBook(book.id);
