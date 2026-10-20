@@ -33,3 +33,9 @@
 ## Limites
 - Les pages légales ne remplacent pas l'avis d'un juriste.
 - Le formulaire peut recevoir du spam : le champ piège arrête les robots simples. Firebase App Check reste une option si cela devient gênant.
+
+## Vérifications sur la vraie base (20/10, après publication des règles)
+- `verify4.py` : 31 vérifications sur 31 réussies (avis, signalements, pseudos, profils, abonnements), avec des comptes temporaires supprimés ensuite.
+- `verif-messages.py` : 7 refus attendus, tous obtenus (lecture sans être modérateur, sujet inconnu, message trop court ou trop long, champ en trop, usurpation d'un compte, date non fixée par le serveur). Le script n'écrit rien quand les règles sont correctes.
+- L'envoi réel d'un message et son affichage dans la page Modération sont à tester par le propriétaire depuis le site, car un message valide ne peut être supprimé que par un modérateur.
+- Sauvegarde : premier fichier chiffré produit le 20/10 (artifact `sauvegarde-biblio-fr`).
