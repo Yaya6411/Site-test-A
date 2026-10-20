@@ -97,28 +97,37 @@ const slim = b => ({
  * Un livre est gardé s'il est récent et si ses catégories (quand il y en a)
  * correspondent au genre.
  * ------------------------------------------------------------------------- */
+// « exclusive » : l'éditeur ne publie que ce genre (un livre sans catégorie est accepté) ;
+// « mixed » : il publie aussi autre chose (une catégorie doit confirmer le genre).
 const PUBLISHER_QUERIES = {
-  manga: ["Ki-oon", "Kana", "Pika", "Kurokawa", "Kazé", "Akata", "Mangetsu", "Meian", "Noeve", "Glénat"],
-  bd: ["Dargaud", "Dupuis", "Le Lombard", "Casterman", "Delcourt", "Bamboo", "Soleil", "Futuropolis", "Rue de Sèvres", "Glénat"],
-  "young-adult": ["Pocket Jeunesse", "Hachette Romans", "Rageot", "Lumen", "Gallimard Jeunesse", "Casterman", "Michel Lafon", "De Saxus"],
-  jeunesse: ["L'École des loisirs", "Gallimard Jeunesse", "Bayard Jeunesse", "Nathan", "Milan", "Flammarion Jeunesse", "Père Castor", "Auzou"],
+  manga: { exclusive: ["Ki-oon", "Kana", "Pika", "Kurokawa", "Kazé", "Akata", "Mangetsu", "Meian", "Noeve Grafx", "Black Box"], mixed: ["Glénat"] },
+  bd: { exclusive: ["Dargaud", "Dupuis", "Le Lombard", "Bamboo", "Soleil", "Futuropolis", "Rue de Sèvres"], mixed: ["Casterman", "Delcourt", "Glénat"] },
+  "young-adult": { exclusive: ["Pocket Jeunesse", "Hachette Romans", "Lumen", "De Saxus"], mixed: ["Rageot", "Gallimard Jeunesse", "Casterman", "Michel Lafon"] },
+  jeunesse: { exclusive: ["L'École des loisirs", "Gallimard Jeunesse", "Bayard Jeunesse", "Père Castor", "Auzou", "Milan"], mixed: ["Nathan", "Flammarion Jeunesse"] },
 };
 const GENRE_FIT = {
-  manga: /\b(manga|mangas|comic|comics|graphic|bande dessinee|bandes dessinees|seinen|shonen|shojo)\b/,
-  bd: /\b(comic|comics|graphic|bande dessinee|bandes dessinees|bd|humour|humor)\b/,
-  "young-adult": /\b(young adult|juvenile|jeunesse|ado|adolescents|teen|fantasy|romance)\b/,
-  jeunesse: /\b(juvenile|jeunesse|enfant|enfants|children|album|albums|contes)\b/,
+  manga: /\b(manga|mangas|seinen|shonen|shojo|josei|manhwa)\b/,
+  bd: /\b(comic|comics|graphic|bande dessinee|bandes dessinees|bd)\b/,
+  "young-adult": /\b(young adult|teen|adolescents|ado|ados)\b/,
+  jeunesse: /\b(juvenile|jeunesse|enfant|enfants|children|album|albums)\b/,
 };
 
-function fitsGenre(book, genreId) {
+function fitsGenre(book, genreId, exclusive) {
   const cats = vm.runInContext("norm", context)((book.categories || []).join(" | "));
-  return !cats || GENRE_FIT[genreId].test(cats);
+  return cats ? GENRE_FIT[genreId].test(cats) || (exclusive && !/\b(cooking|business|economics|self help|health)\b/.test(cats)) : exclusive;
 }
 
-async function publisherSearch(publisher, genreId) {
+// Les catalogues élargissent la recherche (« Kana » trouve « Kanaé ») : l'éditeur doit correspondre.
+function samePublisher(book, publisher) {
+  const norm = vm.runInContext("norm", context);
+  const got = norm(book.publisher || ""), want = norm(publisher);
+  return got === want || got.startsWith(want + " ");
+}
+
+async function publisherSearch(publisher, genreId, exclusive) {
   const fn = name => vm.runInContext(name, context);
   const books = [];
-  const keep = b => isRecent(b) && fitsGenre(b, genreId);
+  const keep = b => isRecent(b) && samePublisher(b, publisher) && fitsGenre(b, genreId, exclusive);
   // Google Books
   try {
     const data = await fn("sources").google.request(`inpublisher:"${publisher}"`, 0, "new");
@@ -171,9 +180,10 @@ async function collect(genre) {
       break;
     }
   }
-  const publishers = (genre && PUBLISHER_QUERIES[genre.id]) || [];
-  for (const publisher of publishers) {
-    found.push(...await publisherSearch(publisher, genre.id));
+  const groups = (genre && PUBLISHER_QUERIES[genre.id]) || { exclusive: [], mixed: [] };
+  const publishers = [...groups.exclusive.map(p => [p, true]), ...groups.mixed.map(p => [p, false])];
+  for (const [publisher, exclusive] of publishers) {
+    found.push(...await publisherSearch(publisher, genre.id, exclusive));
     await new Promise(r => setTimeout(r, 300));
   }
   if (publishers.length) labels.add("éditeurs");
@@ -201,10 +211,22 @@ const hasCover = b => (b.covers || []).length > 0;
 const byDisplayOrder = (a, b) => Number(b.year) - Number(a.year) || hasCover(b) - hasCover(a)
   || String(b.addedAt).localeCompare(String(a.addedAt));
 
-const previous = (() => { try { return JSON.parse(fs.readFileSync(OUT, "utf8")); } catch { return null; } })();
+// Quand les règles de sélection changent, les listes concernées repartent de zéro
+// (sinon les livres retenus par les anciennes règles resteraient d'une semaine à l'autre).
+const FILTER_VERSION = 2;
+const previous = (() => {
+  try {
+    const prev = JSON.parse(fs.readFileSync(OUT, "utf8"));
+    if (prev.filterVersion !== FILTER_VERSION) {
+      prev.all = [];
+      for (const id of Object.keys(PUBLISHER_QUERIES)) if (prev.genres) delete prev.genres[id];
+    }
+    return prev;
+  } catch { return null; }
+})();
 const today = new Date().toISOString().slice(0, 10);
 const GENRES = vm.runInContext("GENRES", context);
-const result = { version: 1, generatedAt: new Date().toISOString(), years: [year - 1, year], sources: [], all: [], genres: {} };
+const result = { version: 1, filterVersion: FILTER_VERSION, generatedAt: new Date().toISOString(), years: [year - 1, year], sources: [], all: [], genres: {} };
 const allSources = new Set();
 let freshCount = 0;
 
@@ -274,9 +296,10 @@ for (const id of RECENT_GENRES) {
 }
 
 // « Tout » : un mélange des genres (romans, polars, mangas…) avant les résultats généraux,
-// pour éviter une liste dominée par les essais et les guides pratiques.
+// pour éviter une liste dominée par les essais et les guides pratiques (biographies et
+// développement personnel restent dans leurs propres listes).
 const TOUT_ORDER = ["romans", "policier", "thriller", "fantasy", "science-fiction", "manga", "bd", "romance",
-  "jeunesse", "young-adult", "biographies", "dev-perso"];
+  "jeunesse", "young-adult"];
 const mixed = [];
 const lists = TOUT_ORDER.map(id => result.genres[id] || []);
 for (let i = 0; i < MAX_PER_LIST; i++) for (const list of lists) if (list[i]) mixed.push(list[i]);
