@@ -192,7 +192,9 @@ async function collect(genre) {
 }
 
 // Nouvelle liste : livres trouvés cette semaine d'abord, puis les anciens encore récents.
-function mergeList(fresh, previous, today) {
+function mergeList(fresh, previous, today, genre) {
+  // Les anciens livres repassent les filtres actuels du site (ils évoluent).
+  const stillValid = b => isRecent(b) && !(genre && vm.runInContext("isGenreFalsePositive", context)(b, genre));
   const firstSeen = new Map((previous || []).map(b => [workKey(b), b.addedAt]));
   const out = new Map();
   for (const b of fresh) {
@@ -201,7 +203,7 @@ function mergeList(fresh, previous, today) {
   }
   for (const b of previous || []) {
     const k = workKey(b);
-    if (!out.has(k) && isRecent(b)) out.set(k, b);
+    if (!out.has(k) && stillValid(b)) out.set(k, b);
   }
   return [...out.values()];
 }
@@ -237,7 +239,7 @@ for (const id of [null, ...RECENT_GENRES]) {
   const { books, labels } = await collect(genre);
   labels.forEach(l => allSources.add(l));
   freshCount += books.length;
-  rawLists[id || ""] = mergeList(books, id ? previous && previous.genres && previous.genres[id] : previous && previous.all, today);
+  rawLists[id || ""] = mergeList(books, id ? previous && previous.genres && previous.genres[id] : previous && previous.all, today, genre);
   console.log(`${(id || "tout").padEnd(16)} ${String(books.length).padStart(3)} trouvés (${labels.join(" + ") || "aucune source"})`);
 }
 

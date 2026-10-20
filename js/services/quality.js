@@ -120,6 +120,8 @@ function dedupeWorks(books) {
 const STUDY_RE = /\b(fiche de lecture|fiches de lecture|resume et analyse|analyse de l oeuvre|etude de l oeuvre|profil d une oeuvre|commentaire compose|reussir le bac|bac de francais|bac francais|guide de lecture|lire et comprendre|questionnaire de lecture|dossier pedagogique|histoire du roman|le roman policier|la science fiction|la bande dessinee)\b/;
 const STUDY_CATEGORIES = /\b(literary criticism|study aids|reference|language arts|education|criticism|critique|history and criticism|dictionaries)\b/;
 const FICTION_CATEGORIES = /\b(fiction|comics|manga|graphic|poetry|drama|roman|romans|bande dessinee|young adult|juvenile|fantasy|science fiction|romance|thriller|policier|mystery|horror|humor|nouvelles|contes|legends)\b/;
+// Catégories d'ouvrages pratiques ou documentaires, hors sujet dans un genre de fiction.
+const NONFICTION_CATEGORIES = /\b(business|economics|self help|cooking|cookery|health|fitness|medical|religion|computers|law|political science|house home|gardening|travel|sports recreation|crafts hobbies|pets|parenting|bibles)\b/;
 const NONFICTION_GENRES = new Set(["temoignages", "true-crime", "documentaires-jeunesse"]);
 
 function isFictionGenre(genre) {
@@ -132,7 +134,7 @@ function isGenreFalsePositive(book, genre) {
   if (!isFictionGenre(genre)) return false;
   const title = norm(book.title);
   const cats = norm(book.categories.join(" | "));
-  return STUDY_RE.test(title) || (STUDY_CATEGORIES.test(cats) && !FICTION_CATEGORIES.test(cats));
+  return STUDY_RE.test(title) || ((STUDY_CATEGORIES.test(cats) || NONFICTION_CATEGORIES.test(cats)) && !FICTION_CATEGORIES.test(cats));
 }
 
 /* ---------- Pertinence ----------------------------------------------------- */
