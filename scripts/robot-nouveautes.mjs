@@ -361,8 +361,8 @@ console.log(`data/incontournables.json écrit : ${Object.keys(must).length}/${mu
 const AG_OUT = path.join(ROOT, "data", "auteurs-genres.json");
 const AUTHORS_PER_RUN = 80;
 const AG_KEEP_DAYS = 60;
-// Version 2 : seules les éditions françaises sont gardées (les listes de la version 1 sont refaites).
-const AG_VERSION = 2;
+// Version 3 : seules les éditions françaises sont gardées (les listes des versions précédentes sont refaites).
+const AG_VERSION = 3;
 const agPrev = (() => {
   try {
     const prev = JSON.parse(fs.readFileSync(AG_OUT, "utf8"));
@@ -373,13 +373,21 @@ const ag = { version: AG_VERSION, generatedAt: new Date().toISOString(), authors
 const FEATURED_AUTHORS = vm.runInContext("FEATURED_AUTHORS", context);
 const ol = vm.runInContext("sources.openlibrary", context);
 const norm = vm.runInContext("norm", context);
+const mainTitleOf = t => String(t || "").split(" — ")[0];
 const lightBook = b => ({ id: b.id, title: b.title, authors: (b.authors || []).slice(0, 3), year: b.year, covers: (b.covers || []).slice(0, 2) });
 
 async function olBooks(query, keep, max) {
   try {
     const { books } = await ol.fetch(query, 0, "relevance");
     // Une édition française précise (lien /books/…) : sinon Open Library donne le titre original (« The Stranger »).
-    const french = b => String(b.link || "").includes("/books/");
+    // L'édition renvoyée n'est pas toujours française : on écarte aussi les titres manifestement anglais.
+    const english = t => {
+      const w = norm(mainTitleOf(t)).split(" ");
+      const en = w.filter(x => ["the", "of", "and", "with", "from", "a", "an", "to", "in", "on", "for"].includes(x)).length;
+      const fr = w.filter(x => ["le", "la", "les", "l", "de", "du", "des", "d", "et", "un", "une", "au", "aux", "en"].includes(x)).length;
+      return (w[0] === "the" || en >= 1) && fr === 0;
+    };
+    const french = b => String(b.link || "").includes("/books/") && !english(b.title);
     let list = vm.runInContext("dedupeWorks", context)(books.filter(b => french(b) && keep(b)));
     list = vm.runInContext("rankByRelevance", context)(list, query);
     return list.slice(0, max).map(lightBook);

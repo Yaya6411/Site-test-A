@@ -20,7 +20,7 @@
 - Les deux robots partagent le groupe de concurrence `robots-donnees` et font `git pull --rebase` avant d'envoyer.
 
 ## Pages auteurs et genres (`scripts/robot-nouveautes.mjs` + `scripts/pages-livres.mjs`)
-- `data/auteurs-genres.json` est rempli par Open Library uniquement (aucun quota Google), en ne gardant que les éditions françaises (lien `/books/…`), sinon Open Library donne le titre original (« The Stranger »). Correctif du 26/10, version 2 du fichier. Chaque semaine : les 74 genres (24 livres) et les 80 auteurs mis en avant dont la liste est la plus ancienne (12 livres). Chaque liste est gardée 60 jours ; les 572 auteurs sont couverts en environ 7 semaines.
+- `data/auteurs-genres.json` est rempli par Open Library uniquement (aucun quota Google), en ne gardant que les éditions françaises (lien `/books/…`), sinon Open Library donne le titre original (« The Stranger »). Correctif du 26/10 : les titres manifestement anglais sont aussi écartés (version 3 du fichier). Chaque semaine : les 74 genres (24 livres) et les 80 auteurs mis en avant dont la liste est la plus ancienne (12 livres). Chaque liste est gardée 60 jours ; les 572 auteurs sont couverts en environ 7 semaines.
 - Pages générées :
   - `livres/genre-<id>.html` si le genre a au moins 4 livres ou des nouveautés ;
   - `livres/auteur-<nom>.html` si l'auteur a au moins 2 livres ou un incontournable.
