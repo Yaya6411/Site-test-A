@@ -361,8 +361,15 @@ console.log(`data/incontournables.json écrit : ${Object.keys(must).length}/${mu
 const AG_OUT = path.join(ROOT, "data", "auteurs-genres.json");
 const AUTHORS_PER_RUN = 80;
 const AG_KEEP_DAYS = 60;
-const agPrev = (() => { try { return JSON.parse(fs.readFileSync(AG_OUT, "utf8")); } catch { return { authors: {}, genres: {} }; } })();
-const ag = { version: 1, generatedAt: new Date().toISOString(), authors: { ...agPrev.authors }, genres: { ...agPrev.genres } };
+// Version 2 : seules les éditions françaises sont gardées (les listes de la version 1 sont refaites).
+const AG_VERSION = 2;
+const agPrev = (() => {
+  try {
+    const prev = JSON.parse(fs.readFileSync(AG_OUT, "utf8"));
+    return prev.version === AG_VERSION ? prev : { authors: {}, genres: {} };
+  } catch { return { authors: {}, genres: {} }; }
+})();
+const ag = { version: AG_VERSION, generatedAt: new Date().toISOString(), authors: { ...agPrev.authors }, genres: { ...agPrev.genres } };
 const FEATURED_AUTHORS = vm.runInContext("FEATURED_AUTHORS", context);
 const ol = vm.runInContext("sources.openlibrary", context);
 const norm = vm.runInContext("norm", context);
@@ -371,7 +378,9 @@ const lightBook = b => ({ id: b.id, title: b.title, authors: (b.authors || []).s
 async function olBooks(query, keep, max) {
   try {
     const { books } = await ol.fetch(query, 0, "relevance");
-    let list = vm.runInContext("dedupeWorks", context)(books.filter(keep));
+    // Une édition française précise (lien /books/…) : sinon Open Library donne le titre original (« The Stranger »).
+    const french = b => String(b.link || "").includes("/books/");
+    let list = vm.runInContext("dedupeWorks", context)(books.filter(b => french(b) && keep(b)));
     list = vm.runInContext("rankByRelevance", context)(list, query);
     return list.slice(0, max).map(lightBook);
   } catch {
